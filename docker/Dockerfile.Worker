@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+
+ARG DOTNET_SDK_TAG=10.0.401
+ARG DOTNET_RUNTIME_TAG=10.0.12
+
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_TAG} AS build
+WORKDIR /src
+
+COPY ["src/EmailSender.Domain/EmailSender.Domain.csproj", "src/EmailSender.Domain/"]
+COPY ["src/EmailSender.Application/EmailSender.Application.csproj", "src/EmailSender.Application/"]
+COPY ["src/EmailSender.Infrastructure/EmailSender.Infrastructure.csproj", "src/EmailSender.Infrastructure/"]
+COPY ["src/EmailSender.Worker/EmailSender.Worker.csproj", "src/EmailSender.Worker/"]
+
+RUN dotnet restore "src/EmailSender.Worker/EmailSender.Worker.csproj"
+
+COPY . .
+RUN dotnet publish "src/EmailSender.Worker/EmailSender.Worker.csproj" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/runtime:${DOTNET_RUNTIME_TAG} AS final
+WORKDIR /app
+
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "EmailSender.Worker.dll"]

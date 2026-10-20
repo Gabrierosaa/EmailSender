@@ -1,0 +1,137 @@
+name: emailsender-dev
+
+services:
+  api:
+    image: emailsender-api:dev
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+
+      ConnectionStrings__DefaultConnection: >-
+        Server=sqlserver,1433;Database=EmailSender_Dev;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=False;TrustServerCertificate=True;
+
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
+
+      Security__ApiKey: ${API_KEY}
+    ports:
+      - "8080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - emailsender-dev
+
+  worker:
+    image: emailsender-worker:dev
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Worker
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Development
+
+      ConnectionStrings__DefaultConnection: >-
+        Server=sqlserver,1433;Database=EmailSender_Dev;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=False;TrustServerCertificate=True;
+
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
+
+      Smtp__Host: mailpit
+      Smtp__Port: "1025"
+      Smtp__Username: ""
+      Smtp__Password: ""
+      Smtp__UseSsl: "false"
+      Smtp__UseStartTls: "false"
+      Smtp__FromAddress: ${SMTP_FROM_ADDRESS}
+      Smtp__FromName: ${SMTP_FROM_NAME}
+
+      Worker__Prefetch: "10"
+      Worker__Retry1Seconds: "15"
+      Worker__Retry2Seconds: "60"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    networks:
+      - emailsender-dev
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-dev-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - emailsender-dev
+
+  rabbitmq:
+    image: rabbitmq:4.1.8-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-dev-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - emailsender-dev
+
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "5000"
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    volumes:
+      - mailpit-dev-data:/data
+    networks:
+      - emailsender-dev
+
+networks:
+  emailsender-dev:
+    driver: bridge
+
+volumes:
+  sqlserver-dev-data:
+  rabbitmq-dev-data:
+  mailpit-dev-data:

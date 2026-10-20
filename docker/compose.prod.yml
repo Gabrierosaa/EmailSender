@@ -1,0 +1,154 @@
+name: emailsender-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  api:
+    image: emailsender-api:${APP_VERSION}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Api
+      args:
+        DOTNET_SDK_TAG: ${DOTNET_SDK_TAG}
+        ASPNET_RUNTIME_TAG: ${DOTNET_RUNTIME_TAG}
+    restart: always
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+
+      ConnectionStrings__DefaultConnection: >-
+        Server=sqlserver,1433;Database=EmailSender_Prod;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;
+
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
+
+      Security__ApiKey: ${API_KEY}
+    expose:
+      - "8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - emailsender-prod
+
+  worker:
+    image: emailsender-worker:${APP_VERSION}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Worker
+      args:
+        DOTNET_SDK_TAG: ${DOTNET_SDK_TAG}
+        DOTNET_RUNTIME_TAG: ${DOTNET_RUNTIME_TAG}
+    restart: always
+    environment:
+      DOTNET_ENVIRONMENT: Production
+
+      ConnectionStrings__DefaultConnection: >-
+        Server=sqlserver,1433;Database=EmailSender_Prod;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;
+
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
+
+      Smtp__Host: email-smtp.${AWS_REGION}.amazonaws.com
+      Smtp__Port: "587"
+      Smtp__Username: ${SES_SMTP_USERNAME}
+      Smtp__Password: ${SES_SMTP_PASSWORD}
+      Smtp__UseSsl: "false"
+      Smtp__UseStartTls: "true"
+      Smtp__FromAddress: ${SMTP_FROM_ADDRESS}
+      Smtp__FromName: ${SMTP_FROM_NAME}
+
+      Worker__Prefetch: ${WORKER_PREFETCH}
+      Worker__Retry1Seconds: ${RETRY_1_SECONDS}
+      Worker__Retry2Seconds: ${RETRY_2_SECONDS}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - emailsender-prod
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04
+    restart: always
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    volumes:
+      - sqlserver-prod-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    logging: *default-logging
+    networks:
+      - emailsender-prod
+
+  rabbitmq:
+    image: rabbitmq:4.1.8-management
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-prod-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - emailsender-prod
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: always
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-prod-data:/data
+      - caddy-prod-config:/config
+    depends_on:
+      - api
+    logging: *default-logging
+    networks:
+      - emailsender-prod
+
+networks:
+  emailsender-prod:
+    driver: bridge
+
+volumes:
+  sqlserver-prod-data:
+  rabbitmq-prod-data:
+  caddy-prod-data:
+  caddy-prod-config:

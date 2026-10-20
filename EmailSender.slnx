@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EmailSender.Api/EmailSender.Api.csproj" />
+    <Project Path="src/EmailSender.Application/EmailSender.Application.csproj" />
+    <Project Path="src/EmailSender.Domain/EmailSender.Domain.csproj" />
+    <Project Path="src/EmailSender.Infrastructure/EmailSender.Infrastructure.csproj" />
+    <Project Path="src/EmailSender.Worker/EmailSender.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EmailSender.Application.Tests/EmailSender.Application.Tests.csproj" />
+    <Project Path="tests/EmailSender.Domain.Tests/EmailSender.Domain.Tests.csproj" />
+    <Project Path="tests/EmailSender.IntegrationTests/EmailSender.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
