@@ -1,4 +1,6 @@
-﻿namespace EmailSender.Domain.Entities
+﻿using EmailSender.Domain.Exceptions;
+
+namespace EmailSender.Domain.Entities
 {
     public class TentativaEnvio
     {
@@ -8,6 +10,42 @@
         public DateTimeOffset IniciadaEm { get; set; }
         public bool Sucesso { get; set; }
         public string CodigoErro { get; set; }
+
+        private TentativaEnvio() { }
+
+        public TentativaEnvio(Guid emailId, int numero, DateTimeOffset iniciadaEm, bool sucesso, string codigoErro)
+        {
+            Validacao();
+
+            Id = Guid.NewGuid();
+            EmailId = emailId;
+            Numero = numero;
+            IniciadaEm = iniciadaEm;
+            Sucesso = sucesso;
+            CodigoErro = codigoErro;
+        }
+
+        private void Validacao()
+        {
+            if (Id == Guid.Empty)
+                throw new ArgumentException("O ID da tentativa de envio é obrigatório.");
+
+            if (EmailId == Guid.Empty)
+                throw new ArgumentException("O ID do email é obrigatório.");
+
+            if (Numero <= 0)
+                throw new ArgumentException("O número da tentativa de envio deve ser maior que zero.");
+
+            if (IniciadaEm == default)
+                throw new ArgumentException("A data de início da tentativa de envio é obrigatória.");
+
+            if (!Sucesso && string.IsNullOrWhiteSpace(CodigoErro))
+                throw new ArgumentException("Uma tentativa com falha deve ter código de erro.");
+
+            if (Sucesso && !string.IsNullOrWhiteSpace(CodigoErro))
+                throw new ArgumentException("Uma tentativa com sucesso não deve ter código de erro.");
+        }
+
     }
 }
    
