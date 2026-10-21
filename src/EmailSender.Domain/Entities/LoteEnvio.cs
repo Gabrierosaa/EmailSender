@@ -1,4 +1,6 @@
-﻿namespace EmailSender.Domain.Entities
+﻿using EmailSender.Domain.Exceptions;
+
+namespace EmailSender.Domain.Entities
 {
     public class LoteEnvio
     {
@@ -25,28 +27,42 @@
             string? corpoHtml = null,
             string? corpoTexto = null)
         {
-            if (string.IsNullOrWhiteSpace(assunto))
-                throw new ArgumentException("Assunto é obrigatório.");
-
-            if (string.IsNullOrWhiteSpace(remetenteNome))
-                throw new ArgumentException("Nome do remetente é obrigatório.");
-
-            if (totalDestinatarios <= 0)
-                throw new ArgumentException("O lote deve possuir pelo menos um destinatário.");
+            Validacao();
 
             Id = Guid.NewGuid();
-
-            Assunto = assunto;
-            RemetenteNome = remetenteNome;
-            TotalDestinatarios = totalDestinatarios;
-
             IdempotencyKey = idempotencyKey;
             RequestHash = requestHash;
+            Assunto = assunto;
+            RemetenteNome = remetenteNome;
             ReplyTo = replyTo;
             CorpoHtml = corpoHtml;
             CorpoTexto = corpoTexto;
-
+            TotalDestinatarios = totalDestinatarios;
             CriadoEm = DateTimeOffset.UtcNow;
         }
+
+        public const int AssuntoMaxLength = 300;
+        public const int RemetenteNomeMaxLength = 200;
+
+        private void Validacao()
+        {
+
+
+            if (Id == Guid.Empty)
+                throw new ArgumentException("O ID do lote de envio é obrigatório.");
+
+            if (string.IsNullOrWhiteSpace(Assunto) || Assunto.Length > AssuntoMaxLength)
+                throw new ArgumentException($"O Assunto não pode ser vazio ou ultrapassar {AssuntoMaxLength} caracteres.");
+
+            if (string.IsNullOrWhiteSpace(RemetenteNome) || RemetenteNome.Length > RemetenteNomeMaxLength)
+                throw new ArgumentException($"O Nome do remetente do lote de envio é obrigatório e não pode ultrapassar {RemetenteNomeMaxLength} caracteres.");
+
+            if (TotalDestinatarios <= 0)
+                throw new ArgumentException("O total de destinatários do lote de envio deve ser maior que zero.");
+
+            if (string.IsNullOrWhiteSpace(CorpoHtml) && string.IsNullOrWhiteSpace(CorpoTexto))
+                throw new ArgumentException("Informe CorpoHtml ou CorpoTexto.");
+        }
+
     }
 }
