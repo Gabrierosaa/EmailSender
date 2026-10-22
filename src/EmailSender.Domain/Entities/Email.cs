@@ -27,13 +27,13 @@ namespace EmailSender.Domain.Entities
         private void Validacao()
         {
             if(Id == Guid.Empty)          
-                throw new ArgumentException("O ID do email é obrigatório.");
+                throw new DomainException("O ID do email é obrigatório.");
 
             if(string.IsNullOrWhiteSpace(Destinatario))          
-                throw new ArgumentException("O destinatário do email é obrigatório.");
+                throw new DomainException("O destinatário do email é obrigatório.");
 
             if (!MailAddress.TryCreate(Destinatario, out _))
-                throw new ArgumentException("O destinatário informado não é um e-mail válido.");
+                throw new DomainException("O destinatário informado não é um e-mail válido.");
         }
 
     }

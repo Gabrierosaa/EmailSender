@@ -49,19 +49,19 @@ namespace EmailSender.Domain.Entities
 
 
             if (Id == Guid.Empty)
-                throw new ArgumentException("O ID do lote de envio é obrigatório.");
+                throw new DomainException("O ID do lote de envio é obrigatório.");
 
             if (string.IsNullOrWhiteSpace(Assunto) || Assunto.Length > AssuntoMaxLength)
-                throw new ArgumentException($"O Assunto não pode ser vazio ou ultrapassar {AssuntoMaxLength} caracteres.");
+                throw new DomainException($"O Assunto não pode ser vazio ou ultrapassar {AssuntoMaxLength} caracteres.");
 
             if (string.IsNullOrWhiteSpace(RemetenteNome) || RemetenteNome.Length > RemetenteNomeMaxLength)
-                throw new ArgumentException($"O Nome do remetente do lote de envio é obrigatório e não pode ultrapassar {RemetenteNomeMaxLength} caracteres.");
+                throw new DomainException($"O Nome do remetente do lote de envio é obrigatório e não pode ultrapassar {RemetenteNomeMaxLength} caracteres.");
 
             if (TotalDestinatarios <= 0)
-                throw new ArgumentException("O total de destinatários do lote de envio deve ser maior que zero.");
+                throw new DomainException("O total de destinatários do lote de envio deve ser maior que zero.");
 
             if (string.IsNullOrWhiteSpace(CorpoHtml) && string.IsNullOrWhiteSpace(CorpoTexto))
-                throw new ArgumentException("Informe CorpoHtml ou CorpoTexto.");
+                throw new DomainException("Informe CorpoHtml ou CorpoTexto.");
         }
 
     }

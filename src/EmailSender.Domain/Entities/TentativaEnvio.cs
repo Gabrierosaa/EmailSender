@@ -28,22 +28,22 @@ namespace EmailSender.Domain.Entities
         private void Validacao()
         {
             if (Id == Guid.Empty)
-                throw new ArgumentException("O ID da tentativa de envio é obrigatório.");
+                throw new DomainException("O ID da tentativa de envio é obrigatório.");
 
             if (EmailId == Guid.Empty)
-                throw new ArgumentException("O ID do email é obrigatório.");
+                throw new DomainException("O ID do email é obrigatório.");
 
             if (Numero <= 0)
-                throw new ArgumentException("O número da tentativa de envio deve ser maior que zero.");
+                throw new DomainException("O número da tentativa de envio deve ser maior que zero.");
 
             if (IniciadaEm == default)
-                throw new ArgumentException("A data de início da tentativa de envio é obrigatória.");
+                throw new DomainException("A data de início da tentativa de envio é obrigatória.");
 
             if (!Sucesso && string.IsNullOrWhiteSpace(CodigoErro))
-                throw new ArgumentException("Uma tentativa com falha deve ter código de erro.");
+                throw new DomainException("Uma tentativa com falha deve ter código de erro.");
 
             if (Sucesso && !string.IsNullOrWhiteSpace(CodigoErro))
-                throw new ArgumentException("Uma tentativa com sucesso não deve ter código de erro.");
+                throw new DomainException("Uma tentativa com sucesso não deve ter código de erro.");
         }
 
     }
