@@ -15,14 +15,14 @@ namespace EmailSender.Domain.Entities
 
         public TentativaEnvio(Guid emailId, int numero, DateTimeOffset iniciadaEm, bool sucesso, string codigoErro)
         {
-            Validacao();
-
             Id = Guid.NewGuid();
             EmailId = emailId;
             Numero = numero;
             IniciadaEm = iniciadaEm;
             Sucesso = sucesso;
             CodigoErro = codigoErro;
+
+            Validacao();
         }
 
         private void Validacao()
