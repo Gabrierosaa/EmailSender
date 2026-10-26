@@ -12,6 +12,102 @@ namespace EmailSender.Domain.Tests
             new(loteId, destinatario, "Nome", "{}");
 
         [Fact]
+        public void Construtor_Valido_DeveGuardarDadosInformados()
+        {
+            var lote = new LoteEnvio(
+                "Assunto", "Remetente",
+                idempotencyKey: "chave", requestHash: "hash", replyTo: "r@teste.com",
+                corpoHtml: "<p>oi</p>", corpoTexto: "oi");
+
+            Assert.NotEqual(Guid.Empty, lote.Id);
+            Assert.Equal("Assunto", lote.Assunto);
+            Assert.Equal("Remetente", lote.RemetenteNome);
+            Assert.Equal("chave", lote.IdempotencyKey);
+            Assert.Equal("hash", lote.RequestHash);
+            Assert.Equal("r@teste.com", lote.ReplyTo);
+            Assert.Equal("<p>oi</p>", lote.CorpoHtml);
+            Assert.Equal("oi", lote.CorpoTexto);
+            Assert.True(DateTimeOffset.UtcNow - lote.CriadoEm < TimeSpan.FromMinutes(1));
+        }
+
+        [Fact]
+        public void Construtor_SomenteCorpoHtml_DeveSerValido()
+        {
+            var lote = new LoteEnvio("Assunto", "Remetente", corpoHtml: "<p>oi</p>");
+
+            Assert.Equal("<p>oi</p>", lote.CorpoHtml);
+        }
+
+        [Fact]
+        public void Construtor_DeveGerarIdsDiferentes()
+        {
+            Assert.NotEqual(CriarLote().Id, CriarLote().Id);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void Construtor_AssuntoVazio_DeveLancarDomainException(string? assunto)
+        {
+            Assert.Throws<DomainException>(() => new LoteEnvio(assunto!, "Remetente", corpoTexto: "Corpo"));
+        }
+
+        [Fact]
+        public void Construtor_AssuntoNoLimite_DeveSerValido()
+        {
+            var assunto = new string('a', LoteEnvio.AssuntoMaxLength);
+
+            var lote = new LoteEnvio(assunto, "Remetente", corpoTexto: "Corpo");
+
+            Assert.Equal(assunto, lote.Assunto);
+        }
+
+        [Fact]
+        public void Construtor_AssuntoAcimaDoLimite_DeveLancarDomainException()
+        {
+            var assunto = new string('a', LoteEnvio.AssuntoMaxLength + 1);
+
+            Assert.Throws<DomainException>(() => new LoteEnvio(assunto, "Remetente", corpoTexto: "Corpo"));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void Construtor_RemetenteVazio_DeveLancarDomainException(string? remetente)
+        {
+            Assert.Throws<DomainException>(() => new LoteEnvio("Assunto", remetente!, corpoTexto: "Corpo"));
+        }
+
+        [Fact]
+        public void Construtor_RemetenteNoLimite_DeveSerValido()
+        {
+            var remetente = new string('a', LoteEnvio.RemetenteNomeMaxLength);
+
+            var lote = new LoteEnvio("Assunto", remetente, corpoTexto: "Corpo");
+
+            Assert.Equal(remetente, lote.RemetenteNome);
+        }
+
+        [Fact]
+        public void Construtor_RemetenteAcimaDoLimite_DeveLancarDomainException()
+        {
+            var remetente = new string('a', LoteEnvio.RemetenteNomeMaxLength + 1);
+
+            Assert.Throws<DomainException>(() => new LoteEnvio("Assunto", remetente, corpoTexto: "Corpo"));
+        }
+
+        [Theory]
+        [InlineData(null, null)]
+        [InlineData("", "")]
+        [InlineData("  ", "  ")]
+        public void Construtor_SemCorpo_DeveLancarDomainException(string? html, string? texto)
+        {
+            Assert.Throws<DomainException>(() => new LoteEnvio("Assunto", "Remetente", corpoHtml: html, corpoTexto: texto));
+        }
+
+        [Fact]
         public void LoteNovo_DeveIniciarVazio()
         {
             var lote = CriarLote();
