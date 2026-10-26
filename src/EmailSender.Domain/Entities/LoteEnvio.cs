@@ -12,23 +12,23 @@ namespace EmailSender.Domain.Entities
         public string? ReplyTo { get; private set; }
         public string? CorpoHtml { get; private set; }
         public string? CorpoTexto { get; private set; }
-        public int TotalDestinatarios { get; private set; }
         public DateTimeOffset CriadoEm { get; private set; }
+
+        private readonly List<Email> _emails = new();
+        public IReadOnlyCollection<Email> Emails => _emails.AsReadOnly();
+        public int TotalDestinatarios => _emails.Count;
 
         private LoteEnvio() { }
 
         public LoteEnvio(
             string assunto,
             string remetenteNome,
-            int totalDestinatarios,
             string? idempotencyKey = null,
             string? requestHash = null,
             string? replyTo = null,
             string? corpoHtml = null,
             string? corpoTexto = null)
         {
-            Validacao();
-
             Id = Guid.NewGuid();
             IdempotencyKey = idempotencyKey;
             RequestHash = requestHash;
@@ -37,8 +37,29 @@ namespace EmailSender.Domain.Entities
             ReplyTo = replyTo;
             CorpoHtml = corpoHtml;
             CorpoTexto = corpoTexto;
-            TotalDestinatarios = totalDestinatarios;
             CriadoEm = DateTimeOffset.UtcNow;
+
+            Validacao();
+        }
+
+        public void AdicionarEmail(Email email)
+        {
+            if (email is null)
+                throw new DomainException("O email é obrigatório.");
+
+            if (email.LoteId != Id)
+                throw new DomainException("O email pertence a outro lote de envio.");
+
+            if (_emails.Any(e => e.Id == email.Id))
+                throw new DomainException("O email já foi adicionado a este lote de envio.");
+
+            _emails.Add(email);
+        }
+
+        public void ValidarEnvio()
+        {
+            if (_emails.Count == 0)
+                throw new DomainException("Um lote de envio vazio não pode ser enviado.");
         }
 
         public const int AssuntoMaxLength = 300;
@@ -56,9 +77,6 @@ namespace EmailSender.Domain.Entities
 
             if (string.IsNullOrWhiteSpace(RemetenteNome) || RemetenteNome.Length > RemetenteNomeMaxLength)
                 throw new DomainException($"O Nome do remetente do lote de envio é obrigatório e não pode ultrapassar {RemetenteNomeMaxLength} caracteres.");
-
-            if (TotalDestinatarios <= 0)
-                throw new DomainException("O total de destinatários do lote de envio deve ser maior que zero.");
 
             if (string.IsNullOrWhiteSpace(CorpoHtml) && string.IsNullOrWhiteSpace(CorpoTexto))
                 throw new DomainException("Informe CorpoHtml ou CorpoTexto.");
