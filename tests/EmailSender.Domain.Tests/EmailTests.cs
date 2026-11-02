@@ -27,7 +27,7 @@ namespace EmailSender.Domain.Tests
             Assert.Equal(loteId, email.LoteId);
             Assert.Equal("a@teste.com", email.Destinatario);
             Assert.Equal("Fulano", email.NomeDestinatario);
-            Assert.Equal("{\"x\":1}", email.variavelJson);
+            Assert.Equal("{\"x\":1}", email.VariavelJson);
             Assert.Equal(EmailStatusEnum.Pendente, email.Status);
             Assert.Empty(email.Tentativas);
         }
