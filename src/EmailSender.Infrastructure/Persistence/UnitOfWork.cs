@@ -1,10 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using EmailSender.Domain.Repositories;
 
 namespace EmailSender.Infrastructure.Persistence
 {
-    internal class UnitOfWork
+    public sealed class UnitOfWork : IUnitOfWork
     {
+        private readonly AppDbContext _context;
+
+        public UnitOfWork(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public Task<int> CommitAsync(CancellationToken ct)
+        {
+            return _context.SaveChangesAsync(ct);
+        }
     }
 }

@@ -10,7 +10,7 @@ namespace EmailSender.Domain.Entities
         public Guid LoteId { get; private set; }
         public string Destinatario { get; private set; }
         public string NomeDestinatario { get; private set; }
-        public string variavelJson { get; private set; }
+        public string VariavelJson { get; private set; }
         public EmailStatusEnum Status { get; private set; }
 
         private readonly List<TentativaEnvio> _tentativas = new();
@@ -23,8 +23,8 @@ namespace EmailSender.Domain.Entities
             Id = Guid.NewGuid();
             LoteId = loteId;
             Destinatario = destinatario;
-            NomeDestinatario = nomeDestinatario;
-            this.variavelJson = variavelJson;
+            NomeDestinatario = nomeDestinatario ?? string.Empty;
+            VariavelJson = variavelJson ?? "{}";
             Status = EmailStatusEnum.Pendente;
 
             Validacao();
