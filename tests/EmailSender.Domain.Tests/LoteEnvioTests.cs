@@ -1,4 +1,5 @@
 ﻿using EmailSender.Domain.Entities;
+using EmailSender.Domain.Enum;
 using EmailSender.Domain.Exceptions;
 
 namespace EmailSender.Domain.Tests
@@ -105,6 +106,65 @@ namespace EmailSender.Domain.Tests
         public void Construtor_SemCorpo_DeveLancarDomainException(string? html, string? texto)
         {
             Assert.Throws<DomainException>(() => new LoteEnvio("Assunto", "Remetente", corpoHtml: html, corpoTexto: texto));
+        }
+
+        [Fact]
+        public void CriarUnitario_Valido_DeveCriarLoteComUmEmailPendente()
+        {
+            var lote = LoteEnvio.CriarUnitario(
+                "Assunto", "Remetente", "a@teste.com",
+                nomeDestinatario: "Fulano", variavelJson: "{\"x\":1}",
+                idempotencyKey: "chave", requestHash: "hash", replyTo: "r@teste.com",
+                corpoHtml: "<p>oi</p>", corpoTexto: "oi");
+
+            var email = Assert.Single(lote.Emails);
+            Assert.Equal(1, lote.TotalDestinatarios);
+            Assert.Equal(lote.Id, email.LoteId);
+            Assert.Equal("a@teste.com", email.Destinatario);
+            Assert.Equal("Fulano", email.NomeDestinatario);
+            Assert.Equal("{\"x\":1}", email.VariavelJson);
+            Assert.Equal(EmailStatusEnum.Pendente, email.Status);
+            Assert.Equal("Assunto", lote.Assunto);
+            Assert.Equal("chave", lote.IdempotencyKey);
+            Assert.Equal("hash", lote.RequestHash);
+            Assert.Equal("r@teste.com", lote.ReplyTo);
+        }
+
+        [Fact]
+        public void CriarUnitario_SemOpcionais_DeveUsarPadroes()
+        {
+            var lote = LoteEnvio.CriarUnitario("Assunto", "Remetente", "a@teste.com", corpoTexto: "oi");
+
+            var email = Assert.Single(lote.Emails);
+            Assert.Equal(string.Empty, email.NomeDestinatario);
+            Assert.Equal("{}", email.VariavelJson);
+            Assert.Null(lote.IdempotencyKey);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("sem-arroba")]
+        public void CriarUnitario_DestinatarioInvalido_DeveLancarDomainException(string destinatario)
+        {
+            Assert.Throws<DomainException>(() =>
+                LoteEnvio.CriarUnitario("Assunto", "Remetente", destinatario, corpoTexto: "oi"));
+        }
+
+        [Fact]
+        public void CriarUnitario_LoteInvalido_DeveLancarDomainException()
+        {
+            Assert.Throws<DomainException>(() =>
+                LoteEnvio.CriarUnitario("", "Remetente", "a@teste.com", corpoTexto: "oi"));
+            Assert.Throws<DomainException>(() =>
+                LoteEnvio.CriarUnitario("Assunto", "Remetente", "a@teste.com"));
+        }
+
+        [Fact]
+        public void CriarUnitario_DeveSerValidoParaEnvio()
+        {
+            var lote = LoteEnvio.CriarUnitario("Assunto", "Remetente", "a@teste.com", corpoTexto: "oi");
+
+            Assert.Null(Record.Exception(() => lote.ValidarEnvio()));
         }
 
         [Fact]

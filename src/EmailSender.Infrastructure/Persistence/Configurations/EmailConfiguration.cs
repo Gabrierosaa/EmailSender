@@ -45,8 +45,18 @@ namespace EmailSender.Infrastructure.Persistence.Configurations
             builder.Navigation(e => e.Tentativas)
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
 
-            builder.HasIndex(e => e.Status);
-            builder.HasIndex(e => e.LoteId);
+            // Consulta de status do lote (contagem por estado) e listagem filtrada.
+            builder.HasIndex(e => new { e.LoteId, e.Status })
+                .HasDatabaseName("IX_Email_LoteId_Status");
+
+            // Reconciliação: achar e-mails Pendentes antigos e ordenar a fila em FIFO.
+            builder.HasIndex("Status", "CriadoEm")
+                .HasDatabaseName("IX_Email_Status_CriadoEm");
+
+            // Impede o mesmo endereço duas vezes no mesmo lote.
+            builder.HasIndex(e => new { e.LoteId, e.Destinatario })
+                .IsUnique()
+                .HasDatabaseName("UQ_Email_LoteId_Destinatario");
         }
     }
 }

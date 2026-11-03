@@ -61,9 +61,15 @@ namespace EmailSender.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("LoteId");
+                    b.HasIndex("LoteId", "Destinatario")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_Email_LoteId_Destinatario");
 
-                    b.HasIndex("Status");
+                    b.HasIndex("LoteId", "Status")
+                        .HasDatabaseName("IX_Email_LoteId_Status");
+
+                    b.HasIndex("Status", "CriadoEm")
+                        .HasDatabaseName("IX_Email_Status_CriadoEm");
 
                     b.ToTable("Emails", (string)null);
                 });
@@ -101,13 +107,14 @@ namespace EmailSender.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(320)");
 
                     b.Property<string>("RequestHash")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
+                        .HasDatabaseName("UQ_Lote_IdempotencyKey")
                         .HasFilter("[IdempotencyKey] IS NOT NULL");
 
                     b.ToTable("LotesEnvio", (string)null);

@@ -42,6 +42,25 @@ namespace EmailSender.Domain.Entities
             Validacao();
         }
 
+        public static LoteEnvio CriarUnitario(
+            string assunto,
+            string remetenteNome,
+            string destinatario,
+            string? nomeDestinatario = null,
+            string? variavelJson = null,
+            string? idempotencyKey = null,
+            string? requestHash = null,
+            string? replyTo = null,
+            string? corpoHtml = null,
+            string? corpoTexto = null)
+        {
+            var lote = new LoteEnvio(assunto, remetenteNome, idempotencyKey, requestHash, replyTo, corpoHtml, corpoTexto);
+
+            lote.AdicionarEmail(new Email(lote.Id, destinatario, nomeDestinatario!, variavelJson!));
+
+            return lote;
+        }
+
         public void AdicionarEmail(Email email)
         {
             if (email is null)
