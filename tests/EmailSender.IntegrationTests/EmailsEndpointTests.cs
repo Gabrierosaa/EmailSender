@@ -3,8 +3,10 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using EmailSender.Application.Abstractions;
+using EmailSender.Domain.Entities;
 using EmailSender.Domain.Enum;
 using EmailSender.Infrastructure.Persistence;
+using EmailSender.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -129,6 +131,70 @@ namespace EmailSender.IntegrationTests
             Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
             var (_, emails) = await _factory.ContarRegistrosAsync();
             Assert.Equal(1, emails);
+        }
+
+        // ---------- GET /{id}/status ----------
+
+        [Fact]
+        public async Task GetStatus_AposPost_Retorna200ComStatusPendenteESemDestinatario()
+        {
+            var criado = await PostarAsync(RequisicaoValida());
+            var id = (await criado.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+            var resposta = await _client.GetAsync($"{Rota}/{id}/status");
+
+            Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+            var json = await resposta.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal(id, doc.RootElement.GetProperty("id").GetGuid());
+            Assert.Equal("Pendente", doc.RootElement.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("ultimaTentativaEm").ValueKind);
+            Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("ultimoErro").ValueKind);
+            Assert.DoesNotContain("destinatario", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("fulano@teste.com", json);
+        }
+
+        [Fact]
+        public async Task GetStatus_ComTentativas_RetornaUltimaTentativaEErro()
+        {
+            var inicio = new DateTimeOffset(2026, 11, 3, 10, 0, 0, TimeSpan.Zero);
+            var lote = LoteEnvio.CriarUnitario("Assunto", "Equipe", "fulano@teste.com", corpoTexto: "Corpo");
+            var email = lote.Emails.Single();
+            email.Enfileirar();
+            email.AdicionarTentativa(inicio, sucesso: false, "SMTP_TIMEOUT");
+            email.Enfileirar();
+            email.AdicionarTentativa(inicio.AddMinutes(5), sucesso: false, "SMTP_REJEITADO");
+
+            await using (var context = new AppDbContext(
+                new DbContextOptionsBuilder<AppDbContext>().UseSqlServer(_factory.ConnectionString).Options))
+            {
+                await new LoteEnvioRepository(context).AdicionarAsync(lote, CancellationToken.None);
+                await new UnitOfWork(context).CommitAsync(CancellationToken.None);
+            }
+
+            var resposta = await _client.GetAsync($"{Rota}/{email.Id}/status");
+
+            Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+            var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("Falhou", corpo.GetProperty("status").GetString());
+            Assert.Equal(inicio.AddMinutes(5), corpo.GetProperty("ultimaTentativaEm").GetDateTimeOffset());
+            Assert.Equal("SMTP_REJEITADO", corpo.GetProperty("ultimoErro").GetString());
+        }
+
+        [Fact]
+        public async Task GetStatus_IdInexistente_Retorna404()
+        {
+            var resposta = await _client.GetAsync($"{Rota}/{Guid.NewGuid()}/status");
+
+            Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        }
+
+        [Fact]
+        public async Task GetStatus_IdNaoGuid_Retorna404()
+        {
+            var resposta = await _client.GetAsync($"{Rota}/abc/status");
+
+            Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
         }
 
         // ---------- 400 ----------
