@@ -66,6 +66,7 @@ namespace EmailSender.Api.ErrorHandling
         }
 
         private static string NomeDoCampo(string propriedade) =>
-            propriedade.Length == 0 ? propriedade : char.ToLowerInvariant(propriedade[0]) + propriedade[1..];
+            string.Join('.', propriedade.Split('.').Select(segmento =>
+                segmento.Length == 0 ? segmento : char.ToLowerInvariant(segmento[0]) + segmento[1..]));
     }
 }

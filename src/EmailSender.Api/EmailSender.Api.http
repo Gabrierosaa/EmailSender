@@ -32,3 +32,42 @@ GET {{EmailSender.Api_HostAddress}}/api/v1/emails/{{id}}/status
 
 ### Consultar status de e-mail inexistente (404)
 GET {{EmailSender.Api_HostAddress}}/api/v1/emails/00000000-0000-0000-0000-000000000001/status
+
+
+### Criar lote com e-mail inválido no item 2 (400, nada é salvo)
+POST {{EmailSender.Api_HostAddress}}/api/v1/lotes
+Content-Type: application/json
+
+{
+  "assunto": "Olá, {{nome}}",
+  "remetenteNome": "Equipe EmailSender",
+  "corpoTexto": "Bem-vindo!",
+  "destinatarios": [
+    { "email": "ana@teste.com", "nome": "Ana" },
+    { "email": "invalido", "nome": "Bruno" },
+    { "email": "carla@teste.com", "nome": "Carla" }
+  ]
+}
+
+### Criar lote válido (202 + Location)
+# @name lote
+POST {{EmailSender.Api_HostAddress}}/api/v1/lotes
+Content-Type: application/json
+
+{
+  "assunto": "Olá, {{nome}}",
+  "remetenteNome": "Equipe EmailSender",
+  "corpoTexto": "Bem-vindo!",
+  "destinatarios": [
+    { "email": "ana@teste.com", "nome": "Ana" },
+    { "email": "bruno@teste.com", "nome": "Bruno" },
+    { "email": "carla@teste.com", "nome": "Carla" }
+  ]
+}
+
+### Consultar o lote criado acima (200)
+@loteId = {{lote.response.body.$.loteId}}
+GET {{EmailSender.Api_HostAddress}}/api/v1/lotes/{{loteId}}
+
+### Consultar lote inexistente (404)
+GET {{EmailSender.Api_HostAddress}}/api/v1/lotes/00000000-0000-0000-0000-000000000001

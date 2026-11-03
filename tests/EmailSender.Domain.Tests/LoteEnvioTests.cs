@@ -248,6 +248,40 @@ namespace EmailSender.Domain.Tests
         }
 
         [Fact]
+        public void AdicionarEmail_NoLimite_DeveAceitarMaxDestinatarios()
+        {
+            var lote = CriarLote();
+
+            for (var i = 0; i < LoteEnvio.MaxDestinatarios; i++)
+                lote.AdicionarEmail(CriarEmail(lote.Id, $"u{i}@teste.com"));
+
+            Assert.Equal(LoteEnvio.MaxDestinatarios, lote.TotalDestinatarios);
+        }
+
+        [Fact]
+        public void AdicionarEmail_AcimaDoLimite_DeveLancarDomainException()
+        {
+            var lote = CriarLote();
+            for (var i = 0; i < LoteEnvio.MaxDestinatarios; i++)
+                lote.AdicionarEmail(CriarEmail(lote.Id, $"u{i}@teste.com"));
+
+            Assert.Throws<DomainException>(() => lote.AdicionarEmail(CriarEmail(lote.Id, "extra@teste.com")));
+            Assert.Equal(LoteEnvio.MaxDestinatarios, lote.TotalDestinatarios);
+        }
+
+        [Theory]
+        [InlineData("a@teste.com")]
+        [InlineData("A@TESTE.COM")]
+        public void AdicionarEmail_DestinatarioRepetidoIgnorandoMaiusculas_DeveLancarDomainException(string repetido)
+        {
+            var lote = CriarLote();
+            lote.AdicionarEmail(CriarEmail(lote.Id, "a@teste.com"));
+
+            Assert.Throws<DomainException>(() => lote.AdicionarEmail(CriarEmail(lote.Id, repetido)));
+            Assert.Equal(1, lote.TotalDestinatarios);
+        }
+
+        [Fact]
         public void ValidarEnvio_LoteVazio_DeveLancarDomainException()
         {
             var lote = CriarLote();

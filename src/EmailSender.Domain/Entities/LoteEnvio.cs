@@ -72,6 +72,12 @@ namespace EmailSender.Domain.Entities
             if (_emails.Any(e => e.Id == email.Id))
                 throw new DomainException("O email já foi adicionado a este lote de envio.");
 
+            if (_emails.Count >= MaxDestinatarios)
+                throw new DomainException($"Um lote de envio não pode ter mais de {MaxDestinatarios} destinatários.");
+
+            if (_emails.Any(e => string.Equals(e.Destinatario, email.Destinatario, StringComparison.OrdinalIgnoreCase)))
+                throw new DomainException("O destinatário já foi adicionado a este lote de envio.");
+
             _emails.Add(email);
         }
 
@@ -81,6 +87,7 @@ namespace EmailSender.Domain.Entities
                 throw new DomainException("Um lote de envio vazio não pode ser enviado.");
         }
 
+        public const int MaxDestinatarios = 1000;
         public const int AssuntoMaxLength = 300;
         public const int RemetenteNomeMaxLength = 200;
 
