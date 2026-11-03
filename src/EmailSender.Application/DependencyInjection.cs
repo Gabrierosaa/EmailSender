@@ -15,7 +15,7 @@ namespace EmailSender.Application
             services.AddSingleton<IValidator<CriarEmailRequest>, CriarEmailRequestValidator>();
             services.AddScoped<RegistrarEmailHandler>();
             services.AddScoped<ProcessarEmailHandler>();
-            services.AddSingleton<ProcessarEmailsPendentesHandler>();
+            services.AddSingleton<IProcessadorEmailsPendentes, ProcessarEmailsPendentesHandler>();
             services.TryAddSingleton(TimeProvider.System);
             services.AddScoped<ConsultarStatusHandler>();
 

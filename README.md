@@ -22,6 +22,7 @@ API para envio de e-mails em lote, de forma assíncrona e confiável. Recebe uma
 - [Testes](#testes)
 - [Ambientes e execução](#ambientes-e-execução)
 - [Configuração SMTP](#configuração-smtp)
+- [Configuração do Worker](#configuração-do-worker)
 - [Roadmap](#roadmap)
 - [Riscos e decisões em aberto](#riscos-e-decisões-em-aberto)
 
@@ -406,6 +407,25 @@ dotnet user-secrets set "Smtp:Senha" "sua-senha" --project src/EmailSender.Worke
 ```
 
 **Prod:** variáveis de ambiente, como `Smtp__Host`, `Smtp__Porta` e `Smtp__Senha`.
+
+## Configuração do Worker
+
+O `EmailSender.Worker` roda em ciclos: busca os e-mails `Pendente`, envia, e só então espera o intervalo (os ciclos nunca se sobrepõem). Uma falha no ciclo é registrada e o próximo roda normalmente. Ctrl+C cancela o envio em andamento e encerra com "Worker encerrado."; se o SMTP já aceitou a mensagem, o resultado ainda é gravado. Um e-mail cancelado antes do envio fica `Enfileirado` (ver limitação abaixo).
+
+Seção `Worker` do `appsettings.json` (validada na inicialização; valor inválido impede o host de subir):
+
+| Chave | Padrão | Faixa válida | Descrição |
+|---|---|---|---|
+| `IntervaloSegundos` | 10 | 1 a 3600 | Pausa entre o fim de um ciclo e o início do seguinte (5 em Development) |
+| `LimiteLote` | 50 | 1 a 1000 | Máximo de e-mails processados por ciclo |
+
+**Executar** (com o SQL Server e um SMTP, como o Mailpit, no ar):
+
+```bash
+dotnet run --project src/EmailSender.Worker
+```
+
+> **Limitação conhecida:** não há reconciliação nesta versão. E-mails que ficarem `Enfileirado` porque o processo caiu durante o envio não são reprocessados.
 
 ## Roadmap
 
