@@ -25,11 +25,13 @@ namespace EmailSender.Application.Tests
             services.AddSingleton(Substitute.For<IUnitOfWork>());
             services.AddSingleton(_sender);
             services.AddSingleton(TimeProvider.System);
+            services.AddSingleton(PoliticaRetry.Padrao);
             services.AddScoped<ProcessarEmailHandler>();
 
             var provider = services.BuildServiceProvider();
             _handler = new ProcessarEmailsPendentesHandler(
                 provider.GetRequiredService<IServiceScopeFactory>(),
+                TimeProvider.System,
                 NullLogger<ProcessarEmailsPendentesHandler>.Instance);
 
             _lotes.ObterPorIdAsync(_lote.Id, Arg.Any<CancellationToken>()).Returns(_lote);
@@ -44,7 +46,7 @@ namespace EmailSender.Application.Tests
             foreach (var e in lista)
                 _emails.ObterPorIdAsync(e.Id, Arg.Any<CancellationToken>()).Returns(e);
 
-            _emails.ObterPorStatusAsync(EmailStatusEnum.Pendente, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            _emails.ObterPendentesParaEnvioAsync(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns(ci => (IReadOnlyList<Email>)lista.Take(ci.ArgAt<int>(1)).ToList());
 
             return lista;
@@ -61,7 +63,7 @@ namespace EmailSender.Application.Tests
 
             var resumo = await _handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
 
-            Assert.Equal(new ResumoProcessamento(3, 2, 1, 0), resumo);
+            Assert.Equal(new ResumoProcessamento(3, 2, 1, 0, 0), resumo);
             Assert.Equal(EmailStatusEnum.Enviado, emails[0].Status);
             Assert.Equal(EmailStatusEnum.Falhou, emails[1].Status);
             Assert.Equal(EmailStatusEnum.Enviado, emails[2].Status);
@@ -79,7 +81,7 @@ namespace EmailSender.Application.Tests
             Assert.Equal(2, resumo.Processados);
             Assert.Equal(2, resumo.Enviados);
             Assert.Equal(EmailStatusEnum.Pendente, emails[2].Status);
-            await _emails.Received(1).ObterPorStatusAsync(EmailStatusEnum.Pendente, 2, Arg.Any<CancellationToken>());
+            await _emails.Received(1).ObterPendentesParaEnvioAsync(Arg.Any<DateTimeOffset>(), 2, Arg.Any<CancellationToken>());
         }
 
         [Fact]
@@ -93,7 +95,7 @@ namespace EmailSender.Application.Tests
 
             var resumo = await _handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
 
-            Assert.Equal(new ResumoProcessamento(2, 1, 1, 0), resumo);
+            Assert.Equal(new ResumoProcessamento(2, 1, 1, 0, 0), resumo);
         }
 
         [Fact]
@@ -103,7 +105,7 @@ namespace EmailSender.Application.Tests
 
             var resumo = await _handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
 
-            Assert.Equal(new ResumoProcessamento(0, 0, 0, 0), resumo);
+            Assert.Equal(new ResumoProcessamento(0, 0, 0, 0, 0), resumo);
         }
     }
 }

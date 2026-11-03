@@ -1,5 +1,4 @@
 ﻿using System.Data.Common;
-using EmailSender.Domain.Enum;
 using EmailSender.Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -13,13 +12,16 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
     public sealed class ProcessarEmailsPendentesHandler : IProcessadorEmailsPendentes
     {
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly TimeProvider _clock;
         private readonly ILogger<ProcessarEmailsPendentesHandler> _logger;
 
         public ProcessarEmailsPendentesHandler(
             IServiceScopeFactory scopeFactory,
+            TimeProvider clock,
             ILogger<ProcessarEmailsPendentesHandler> logger)
         {
             _scopeFactory = scopeFactory;
+            _clock = clock;
             _logger = logger;
         }
 
@@ -29,7 +31,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
 
             var ids = await ObterIdsPendentesAsync(command.Limite, ct);
 
-            int enviados = 0, falhos = 0, ignorados = 0;
+            int enviados = 0, falhos = 0, reagendados = 0, ignorados = 0;
 
             foreach (var id in ids)
             {
@@ -44,6 +46,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
                     {
                         case ResultadoProcessamento.Enviado: enviados++; break;
                         case ResultadoProcessamento.Falhou: falhos++; break;
+                        case ResultadoProcessamento.Reagendado: reagendados++; break;
                         default: ignorados++; break;
                     }
                 }
@@ -54,7 +57,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
                 }
             }
 
-            return new ResumoProcessamento(ids.Count, enviados, falhos, ignorados);
+            return new ResumoProcessamento(ids.Count, enviados, falhos, reagendados, ignorados);
         }
 
         private async Task<IReadOnlyList<Guid>> ObterIdsPendentesAsync(int limite, CancellationToken ct)
@@ -62,7 +65,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
             await using var scope = _scopeFactory.CreateAsyncScope();
             var repositorio = scope.ServiceProvider.GetRequiredService<IEmailRepository>();
 
-            var pendentes = await repositorio.ObterPorStatusAsync(EmailStatusEnum.Pendente, limite, ct);
+            var pendentes = await repositorio.ObterPendentesParaEnvioAsync(_clock.GetUtcNow(), limite, ct);
             return pendentes.Select(e => e.Id).ToList();
         }
 

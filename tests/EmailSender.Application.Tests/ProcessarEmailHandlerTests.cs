@@ -22,12 +22,19 @@ namespace EmailSender.Application.Tests
 
         public ProcessarEmailHandlerTests()
         {
-            _handler = new ProcessarEmailHandler(_emails, _lotes, _unitOfWork, _sender, _clock);
-            _email = new Email(_lote.Id, "a@teste.com", "Fulano", "{}");
+            _handler = CriarHandler(PoliticaRetry.Padrao);
+            _email =new Email(_lote.Id, "a@teste.com", "Fulano", "{}");
 
             _emails.ObterPorIdAsync(_email.Id, Arg.Any<CancellationToken>()).Returns(_email);
             _lotes.ObterPorIdAsync(_lote.Id, Arg.Any<CancellationToken>()).Returns(_lote);
         }
+
+        private ProcessarEmailHandler CriarHandler(PoliticaRetry retry) =>
+            new(_emails, _lotes, _unitOfWork, _sender, _clock, retry);
+
+        private void SenderLancaFalhaTemporaria() =>
+            _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
+                .Returns<ResultadoEnvio>(_ => throw new FalhaTemporariaEnvioException("smtp fora"));
 
         [Fact]
         public async Task Sucesso_DeveMarcarEnviadoERegistrarTentativaComSucesso()
@@ -81,15 +88,122 @@ namespace EmailSender.Application.Tests
         }
 
         [Fact]
-        public async Task FalhaTemporaria_DeveMarcarFalhouComSmtpIndisponivel()
+        public async Task FalhaPermanente_NaoDeveAgendarNovaTentativa()
         {
             _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
-                .Returns<ResultadoEnvio>(_ => throw new FalhaTemporariaEnvioException("smtp fora"));
+                .Returns(new ResultadoEnvio(false, "SMTP_550"));
+
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(EmailStatusEnum.Falhou, _email.Status);
+            Assert.Null(_email.ProximaTentativaEm);
+            Assert.Single(_email.Tentativas);
+        }
+
+        [Fact]
+        public async Task FalhaTemporariaComTentativasRestantes_DeveReagendarEm15Segundos()
+        {
+            SenderLancaFalhaTemporaria();
+
+            var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(ResultadoProcessamento.Reagendado, resultado);
+            Assert.Equal(EmailStatusEnum.Pendente, _email.Status);
+            Assert.Equal(_clock.GetUtcNow().AddSeconds(15), _email.ProximaTentativaEm);
+            Assert.Equal("SMTP_INDISPONIVEL", Assert.Single(_email.Tentativas).CodigoErro);
+        }
+
+        [Fact]
+        public async Task FalhaLenta_DeveContarOIntervaloAPartirDoFimDaFalha()
+        {
+            _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
+                .Returns<ResultadoEnvio>(_ =>
+                {
+                    _clock.Advance(TimeSpan.FromSeconds(30)); // timeout longo
+                    throw new FalhaTemporariaEnvioException("timeout");
+                });
+
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(_clock.GetUtcNow().AddSeconds(15), _email.ProximaTentativaEm);
+        }
+
+        [Fact]
+        public async Task SegundaFalhaTemporaria_DeveReagendarEm60Segundos()
+        {
+            SenderLancaFalhaTemporaria();
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+            _clock.Advance(TimeSpan.FromSeconds(15));
+
+            var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(ResultadoProcessamento.Reagendado, resultado);
+            Assert.Equal(EmailStatusEnum.Pendente, _email.Status);
+            Assert.Equal(_clock.GetUtcNow().AddSeconds(60), _email.ProximaTentativaEm);
+            Assert.Equal(2, _email.Tentativas.Count);
+        }
+
+        [Fact]
+        public async Task TerceiraFalhaTemporaria_DeveEsgotarMarcandoFalhou()
+        {
+            SenderLancaFalhaTemporaria();
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+            _clock.Advance(TimeSpan.FromSeconds(15));
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+            _clock.Advance(TimeSpan.FromSeconds(60));
 
             var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
 
             Assert.Equal(ResultadoProcessamento.Falhou, resultado);
-            Assert.Equal("SMTP_INDISPONIVEL", Assert.Single(_email.Tentativas).CodigoErro);
+            Assert.Equal(EmailStatusEnum.Falhou, _email.Status);
+            Assert.Null(_email.ProximaTentativaEm);
+            Assert.Equal(3, _email.Tentativas.Count);
+            Assert.Equal("SMTP_INDISPONIVEL", _email.Tentativas.Last().CodigoErro);
+        }
+
+        [Fact]
+        public async Task SucessoNaSegundaTentativa_DeveMarcarEnviadoComDuasTentativas()
+        {
+            _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
+                .Returns(
+                    _ => throw new FalhaTemporariaEnvioException("smtp fora"),
+                    _ => new ResultadoEnvio(true, null));
+
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+            _clock.Advance(TimeSpan.FromSeconds(15));
+            var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(ResultadoProcessamento.Enviado, resultado);
+            Assert.Equal(EmailStatusEnum.Enviado, _email.Status);
+            Assert.Equal(2, _email.Tentativas.Count);
+            Assert.False(_email.Tentativas.First().Sucesso);
+            Assert.True(_email.Tentativas.Last().Sucesso);
+        }
+
+        [Fact]
+        public async Task MaxTentativasIgualA1_NaoDeveReagendar()
+        {
+            var handler = CriarHandler(new PoliticaRetry(1, [TimeSpan.FromSeconds(15)]));
+            SenderLancaFalhaTemporaria();
+
+            var resultado = await handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(ResultadoProcessamento.Falhou, resultado);
+            Assert.Equal(EmailStatusEnum.Falhou, _email.Status);
+            Assert.Null(_email.ProximaTentativaEm);
+        }
+
+        [Fact]
+        public async Task EmailComProximaTentativaFutura_DeveIgnorarSemEnviar()
+        {
+            SenderLancaFalhaTemporaria();
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+            _sender.ClearReceivedCalls();
+
+            var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(ResultadoProcessamento.Ignorado, resultado);
+            await _sender.DidNotReceiveWithAnyArgs().EnviarAsync(default!, default!, default);
         }
 
         [Fact]
@@ -101,6 +215,8 @@ namespace EmailSender.Application.Tests
             var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
 
             Assert.Equal(ResultadoProcessamento.Falhou, resultado);
+            Assert.Equal(EmailStatusEnum.Falhou, _email.Status);
+            Assert.Null(_email.ProximaTentativaEm);
             Assert.Equal("ERRO_INESPERADO", Assert.Single(_email.Tentativas).CodigoErro);
         }
 

@@ -16,6 +16,11 @@ namespace EmailSender.Application.Tests
         public Task<IReadOnlyList<Email>> ObterPorStatusAsync(EmailStatusEnum status, int limite, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<Email>>(_itens.Where(e => e.Status == status).Take(limite).ToList());
 
+        public Task<IReadOnlyList<Email>> ObterPendentesParaEnvioAsync(DateTimeOffset agora, int limite, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<Email>>(_itens
+                .Where(e => e.Status == EmailStatusEnum.Pendente && (e.ProximaTentativaEm is null || e.ProximaTentativaEm <= agora))
+                .Take(limite).ToList());
+
         public Task AdicionarAsync(Email email, CancellationToken ct)
         {
             _itens.Add(email);

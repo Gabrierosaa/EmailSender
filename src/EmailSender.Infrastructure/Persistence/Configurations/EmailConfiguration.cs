@@ -30,6 +30,9 @@ namespace EmailSender.Infrastructure.Persistence.Configurations
                 .HasConversion<string>()
                 .HasMaxLength(20);
 
+            // Quando o e-mail reagendado volta a ser elegível para envio (retry); nulo = imediatamente.
+            builder.Property(e => e.ProximaTentativaEm);
+
             // Token de concorrência: se dois workers tentarem mudar o mesmo email (ex.: Pendente -> Enfileirado),
             // o segundo SaveChanges lança DbUpdateConcurrencyException e não deve enviar.
             builder.Property<byte[]>("RowVersion").IsRowVersion();

@@ -22,8 +22,8 @@ public sealed class EnvioEmailWorker(
                 var r = await processador.HandleAsync(
                     new ProcessarEmailsPendentesCommand(cfg.LimiteLote), stoppingToken);
                 logger.LogInformation(
-                    "Ciclo concluído. Processados: {P}, enviados: {E}, falhos: {F}, ignorados: {I}.",
-                    r.Processados, r.Enviados, r.Falhos, r.Ignorados);
+                    "Ciclo concluído. Processados: {P}, enviados: {E}, falhos: {F}, reagendados: {R}, ignorados: {I}.",
+                    r.Processados, r.Enviados, r.Falhos, r.Reagendados, r.Ignorados);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

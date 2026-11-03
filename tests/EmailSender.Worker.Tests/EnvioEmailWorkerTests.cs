@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes;
 using EmailSender.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -23,7 +24,7 @@ namespace EmailSender.Worker.Tests
             }
         }
 
-        private static readonly ResumoProcessamento Vazio = new(0, 0, 0, 0);
+        private static readonly ResumoProcessamento Vazio = new(0, 0, 0, 0, 0);
 
         private static EnvioEmailWorker Criar(IProcessadorEmailsPendentes p, int intervalo = 1, int lote = 50) =>
             new(p, Options.Create(new EnvioEmailWorkerSettings { IntervaloSegundos = intervalo, LimiteLote = lote }),
@@ -139,5 +140,75 @@ namespace EmailSender.Worker.Tests
         [InlineData(1001)]
         public void LimiteForaDaFaixa_Falha(int valor) =>
             Assert.NotEmpty(Validar(new EnvioEmailWorkerSettings { LimiteLote = valor }));
+    }
+}
+
+namespace EmailSender.Worker.Tests
+{
+    public class RetrySettingsTests
+    {
+        private static List<string> Erros(RetrySettings s)
+        {
+            var r = new List<ValidationResult>();
+            Validator.TryValidateObject(s, new ValidationContext(s), r, validateAllProperties: true);
+            var erros = r.Select(x => x.ErrorMessage!).ToList();
+
+            var custom = new RetrySettingsValidator().Validate(null, s);
+            if (custom.Failed) erros.AddRange(custom.Failures!);
+            return erros;
+        }
+
+        [Fact]
+        public void Padrao_Eh3Tentativas_EListaDeIntervalosVemDaConfiguracao()
+        {
+            var s = new RetrySettings();
+
+            Assert.Equal(3, s.MaxTentativas);
+            Assert.Empty(s.IntervalosSegundos);
+            Assert.NotEmpty(Erros(s));
+        }
+
+        [Fact]
+        public void BindDoAppsettings_NaoDuplicaOsIntervalos()
+        {
+            var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Retry:MaxTentativas"] = "3",
+                    ["Retry:IntervalosSegundos:0"] = "15",
+                    ["Retry:IntervalosSegundos:1"] = "60",
+                }).Build();
+
+            var s = config.GetSection(RetrySettings.Secao).Get<RetrySettings>()!;
+
+            Assert.Equal([15, 60], s.IntervalosSegundos);
+            Assert.Empty(Erros(s));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(11)]
+        public void MaxTentativasForaDaFaixa_Falha(int valor) =>
+            Assert.NotEmpty(Erros(new RetrySettings { MaxTentativas = valor }));
+
+        [Fact]
+        public void ListaVazia_OuNula_Falha()
+        {
+            Assert.NotEmpty(Erros(new RetrySettings { IntervalosSegundos = null! }));
+            ListaVazia_Falha();
+        }
+
+        private static void ListaVazia_Falha() =>
+            Assert.NotEmpty(Erros(new RetrySettings { IntervalosSegundos = [] }));
+
+        [Theory]
+        [InlineData(60, 15)]
+        [InlineData(15, 15)]
+        public void ListaNaoEstritamenteCrescente_Falha(int a, int b) =>
+            Assert.NotEmpty(Erros(new RetrySettings { IntervalosSegundos = [a, b] }));
+
+        [Fact]
+        public void IntervaloNaoPositivo_Falha() =>
+            Assert.NotEmpty(Erros(new RetrySettings { IntervalosSegundos = [0, 10] }));
     }
 }

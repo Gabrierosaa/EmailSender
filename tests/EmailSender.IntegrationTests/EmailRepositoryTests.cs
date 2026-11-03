@@ -248,5 +248,40 @@ namespace EmailSender.IntegrationTests
                 Assert.Null(await repo.ObterPorIdempotencyKeyAsync("outra", _ct));
             }
         }
+
+        [Fact]
+        public async Task ObterPendentesParaEnvio_IgnoraDataFuturaEIncluiVencidosENulos()
+        {
+            var lote = await SalvarLoteAsync();
+            var agora = DateTimeOffset.UtcNow;
+
+            var semData = new Email(lote.Id, "a@teste.com", "A", "{}");
+            var vencido = ReagendadoEm(lote, "b@teste.com", agora.AddSeconds(-5));
+            var futuro = ReagendadoEm(lote, "c@teste.com", agora.AddSeconds(30));
+            var noLimite = ReagendadoEm(lote, "d@teste.com", agora);
+
+            await using (var context = CriarContexto())
+            {
+                var repo = new EmailRepository(context);
+                foreach (var e in new[] { semData, vencido, futuro, noLimite })
+                    await repo.AdicionarAsync(e, _ct);
+                await new UnitOfWork(context).CommitAsync(_ct);
+            }
+
+            await using var leitura = CriarContexto();
+            var pendentes = await new EmailRepository(leitura).ObterPendentesParaEnvioAsync(agora, 10, _ct);
+
+            Assert.Equal(new[] { semData.Id, vencido.Id, noLimite.Id }.Order(), pendentes.Select(e => e.Id).Order());
+            Assert.Single(pendentes.Single(e => e.Id == vencido.Id).Tentativas);
+        }
+
+        private static Email ReagendadoEm(LoteEnvio lote, string destinatario, DateTimeOffset em)
+        {
+            var email = new Email(lote.Id, destinatario, "N", "{}");
+            email.Enfileirar();
+            email.RegistrarFalha(DateTimeOffset.UtcNow, "SMTP_INDISPONIVEL");
+            email.AgendarNovaTentativa(em);
+            return email;
+        }
     }
 }

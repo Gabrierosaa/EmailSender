@@ -92,7 +92,7 @@ Cliente ──HTTPS + API Key──▶ API ──grava──▶ SQL Server
 | D03 | Mensagem enxuta (só identificadores) | O banco é a fonte da verdade; dados pessoais não circulam pela fila |
 | D04 | Clean Architecture enxuta + DDD tático | Domínio pequeno, mas com regras de estado que merecem encapsulamento |
 | D05 | `RabbitMQ.Client` direto, sem MassTransit/Wolverine | Aprender exchanges, filas, ack, retry e dead letter |
-| D06 | Retry com filas de espera (TTL + dead-lettering) | Só recursos nativos do RabbitMQ, sobrevive a reinicializações |
+| D06 | Retry no banco (`ProximaTentativaEm`), sem RabbitMQ | Este projeto não usa fila: a falha temporária devolve o e-mail a `Pendente` com a data da próxima tentativa, e o Worker só seleciona os vencidos. Sobrevive a reinicializações e dispensa filas de espera/DLQ. (O desenho original com filas TTL + dead-lettering fica como referência na seção de mensageria.) |
 | D07 | Reconciliação de `Pendente` em vez de Transactional Outbox | Cobre o mesmo risco com bem menos código |
 | D08 | SQL Server + EF Core; conteúdo guardado no lote | Assunto e corpo se repetem em até 1.000 e-mails |
 | D09 | Casos de uso como classes simples + `IEmailSender` (MailKit) | Menos "mágica"; Mailpit em dev e SES em prod só trocando configuração |
@@ -143,22 +143,26 @@ Os TTLs ficam em configuração (valores sugeridos).
 }
 ```
 
-**Política de retentativa** (3 tentativas no total, configurável)
+**Política de retentativa** (implementada no banco, sem RabbitMQ — ver D06; 3 tentativas no total, configurável na seção [`Retry`](#configuração-de-retry))
 
-| Tentativa | Se falhar (transitória) | Espera | Estado do e-mail |
-|-----------|-------------------------|--------|------------------|
-| 1ª | Publica em `email.retry.1` | 15 s | Enfileirado (Tentativas = 1) |
-| 2ª | Publica em `email.retry.2` | 60 s | Enfileirado (Tentativas = 2) |
-| 3ª | Publica em `email.dlq` | — | Falhou (Tentativas = 3) |
+| Tentativa | Se falhar (temporária) | Espera | Estado do e-mail |
+|-----------|------------------------|--------|------------------|
+| 1ª | `AgendarNovaTentativa(início + 15 s)` | 15 s | Pendente (Tentativas = 1, `ProximaTentativaEm` = +15 s) |
+| 2ª | `AgendarNovaTentativa(início + 60 s)` | 60 s | Pendente (Tentativas = 2, `ProximaTentativaEm` = +60 s) |
+| 3ª | Esgotou as tentativas | — | Falhou (Tentativas = 3, `ProximaTentativaEm` nulo) |
+
+A transição `Falhou → Pendente` acontece na mesma unidade de trabalho que registra a falha, então o banco nunca grava `Falhou` para um e-mail que ainda terá retry. O Worker só seleciona `Pendente` com `ProximaTentativaEm` nulo ou vencido, e o `ProcessarEmailHandler` ignora (`Ignorado`) um e-mail reagendado cuja data ainda não chegou.
 
 **Classificação das falhas**
 
 | Tipo | Exemplos | Ação |
 |------|----------|------|
-| Temporária | Timeout, conexão recusada, SMTP 4xx, rate limit do provedor | Retry conforme a tabela acima |
-| Permanente | SMTP 5xx: caixa inexistente, endereço rejeitado | Marca `Falhou` na hora, registra a tentativa e dá ack |
-| Mensagem inválida | JSON malformado, `emailId` inexistente | Vai direto para `email.dlq`, com log de erro |
-| Banco indisponível | Não foi possível ler/gravar o status | Tratada como temporária |
+| Temporária (`FalhaTemporariaEnvioException`) | Timeout, conexão recusada, SMTP 4xx, rate limit do provedor | Registra `SMTP_INDISPONIVEL`; se ainda há tentativas, agenda a próxima (`Reagendado`), senão `Falhou` |
+| Permanente (`ResultadoEnvio(false, código)`) | SMTP 5xx: caixa inexistente, endereço rejeitado | `Falhou` na hora, com o código recebido; sem retry |
+| Inesperada | Qualquer outra exceção (exceto cancelamento e falha de banco) | Registra `ERRO_INESPERADO`; `Falhou`, sem retry |
+| Banco indisponível | Não foi possível ler/gravar o status | Propaga; o ciclo falha e o próximo tenta de novo |
+
+> Mensagem inválida e DLQ pertencem ao desenho com RabbitMQ e não existem nesta versão.
 
 **Idempotência (3 camadas)**
 
@@ -176,9 +180,9 @@ Os TTLs ficam em configuração (valores sugeridos).
 
 O `ProcessarEmailsPendentesHandler` lê os Ids dos e-mails `Pendente` (limite padrão: 50) e processa cada um em um escopo próprio (um `DbContext` por e-mail) com o `ProcessarEmailHandler`. Um erro inesperado em um e-mail é logado (só o Id) e contado como falho, e o laço segue. Falhas de banco (`DbException`) e cancelamento não são isolados: propagam.
 
-Fluxo de status: **Pendente → Enfileirado → Enviado | Falhou**.
+Fluxo de status: **Pendente → Enfileirado → Enviado | Falhou**, com o laço de retry **Enfileirado → Falhou → Pendente** (reagendado) para falhas temporárias.
 
-1. O e-mail é carregado; se não existe ou não está `Pendente`, o resultado é `Ignorado`.
+1. O e-mail é carregado; se não existe, não está `Pendente` ou tem `ProximaTentativaEm` no futuro, o resultado é `Ignorado`.
 2. `Enfileirar()` + commit "reserva" o e-mail pelo `RowVersion`. Se outro processo reservou antes, o commit lança `ConflitoConcorrenciaException` (traduzida de `DbUpdateConcurrencyException` no `UnitOfWork`) e o resultado é `Ignorado`, sem envio.
 3. O envio é feito pelo `IEmailSender` e a tentativa é registrada, seguida de um segundo commit.
 
@@ -186,8 +190,9 @@ Fluxo de status: **Pendente → Enfileirado → Enviado | Falhou**.
 |----------|-----------|--------------|
 | `ResultadoEnvio.Sucesso = true` | `Enviado` | — |
 | `ResultadoEnvio.Sucesso = false` | `Falhou` | o código recebido (máx. 100 caracteres; vazio vira `ERRO_INESPERADO`) |
-| `FalhaTemporariaEnvioException` | `Falhou` | `SMTP_INDISPONIVEL` |
-| Outra exceção (exceto `OperationCanceledException`) | `Falhou` | `ERRO_INESPERADO` |
+| `FalhaTemporariaEnvioException`, com tentativas restantes | `Reagendado` (volta a `Pendente` com `ProximaTentativaEm`) | `SMTP_INDISPONIVEL` |
+| `FalhaTemporariaEnvioException`, tentativas esgotadas | `Falhou` | `SMTP_INDISPONIVEL` |
+| Outra exceção (exceto `OperationCanceledException`) | `Falhou`, sem retry | `ERRO_INESPERADO` |
 
 > **Limitação conhecida:** se o processo cair entre o commit da reserva (passo 2) e o registro do resultado, o e-mail fica `Enfileirado` sem tentativa. A reconciliação desse caso não faz parte desta etapa.
 
@@ -418,6 +423,21 @@ Seção `Worker` do `appsettings.json` (validada na inicialização; valor invá
 |---|---|---|---|
 | `IntervaloSegundos` | 10 | 1 a 3600 | Pausa entre o fim de um ciclo e o início do seguinte (5 em Development) |
 | `LimiteLote` | 50 | 1 a 1000 | Máximo de e-mails processados por ciclo |
+
+### Configuração de Retry
+
+Seção `Retry` do `appsettings.json` do Worker (validada na inicialização):
+
+```json
+"Retry": { "MaxTentativas": 3, "IntervalosSegundos": [15, 60] }
+```
+
+| Chave | Padrão | Regra | Descrição |
+|---|---|---|---|
+| `MaxTentativas` | 3 | 1 a 10 | Total de tentativas (a primeira inclusa). `1` desliga o retry |
+| `IntervalosSegundos` | `[15, 60]` | pelo menos 1 item, positivos e estritamente crescentes | Espera após a 1ª, 2ª… falha; se a lista for menor que o necessário, repete o último valor |
+
+A API e o Worker resolvem o `ProcessarEmailHandler`; o `AddApplication` registra a política padrão (3 tentativas, 15 s e 60 s) e o Worker a sobrescreve com a seção `Retry`.
 
 **Executar** (com o SQL Server e um SMTP, como o Mailpit, no ar):
 

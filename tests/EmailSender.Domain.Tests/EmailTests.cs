@@ -262,5 +262,42 @@ namespace EmailSender.Domain.Tests
             Assert.Throws<NotSupportedException>(() =>
                 colecao.Add(new TentativaEnvio(email.Id, 1, DateTimeOffset.UtcNow, true, null!)));
         }
+
+        [Fact]
+        public void AgendarNovaTentativa_EmailFalhou_DeveVoltarPendenteComADataInformada()
+        {
+            var email = CriarEmailEnfileirado();
+            email.RegistrarFalha(DateTimeOffset.UtcNow, "SMTP_INDISPONIVEL");
+            var em = DateTimeOffset.UtcNow.AddSeconds(15);
+
+            email.AgendarNovaTentativa(em);
+
+            Assert.Equal(EmailStatusEnum.Pendente, email.Status);
+            Assert.Equal(em, email.ProximaTentativaEm);
+            Assert.Single(email.Tentativas);
+        }
+
+        [Fact]
+        public void AgendarNovaTentativa_EmailNaoFalhou_DeveLancarDomainException()
+        {
+            Assert.Throws<DomainException>(() => CriarEmail().AgendarNovaTentativa(DateTimeOffset.UtcNow));
+            Assert.Throws<DomainException>(() => CriarEmailEnfileirado().AgendarNovaTentativa(DateTimeOffset.UtcNow));
+
+            var enviado = CriarEmailEnfileirado();
+            enviado.RegistrarSucesso(DateTimeOffset.UtcNow);
+            Assert.Throws<DomainException>(() => enviado.AgendarNovaTentativa(DateTimeOffset.UtcNow));
+        }
+
+        [Fact]
+        public void Enfileirar_DeveLimparProximaTentativaEm()
+        {
+            var email = CriarEmailEnfileirado();
+            email.RegistrarFalha(DateTimeOffset.UtcNow, "SMTP_INDISPONIVEL");
+            email.AgendarNovaTentativa(DateTimeOffset.UtcNow.AddSeconds(15));
+
+            email.Enfileirar();
+
+            Assert.Null(email.ProximaTentativaEm);
+        }
     }
 }

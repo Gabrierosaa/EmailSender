@@ -9,6 +9,7 @@ using EmailSender.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace EmailSender.IntegrationTests
 {
@@ -25,7 +26,7 @@ namespace EmailSender.IntegrationTests
             _connectionString = new SqlConnectionStringBuilder(sql.ConnectionString) { InitialCatalog = _database }.ConnectionString;
         }
 
-        private ServiceProvider CriarProvider()
+        private ServiceProvider CriarProvider(TimeProvider? clock = null, PoliticaRetry? retry = null)
         {
             var services = new ServiceCollection();
             services.AddLogging();
@@ -34,7 +35,8 @@ namespace EmailSender.IntegrationTests
             services.AddScoped<ILoteEnvioRepository, LoteEnvioRepository>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddSingleton<IEmailSender>(_sender);
-            services.AddSingleton(TimeProvider.System);
+            services.AddSingleton(clock ?? TimeProvider.System);
+            services.AddSingleton(retry ?? PoliticaRetry.Padrao);
             services.AddScoped<ProcessarEmailHandler>();
             services.AddSingleton<ProcessarEmailsPendentesHandler>();
             return services.BuildServiceProvider();
@@ -82,7 +84,7 @@ namespace EmailSender.IntegrationTests
             var resumo = await provider.GetRequiredService<ProcessarEmailsPendentesHandler>()
                 .HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
 
-            Assert.Equal(new ResumoProcessamento(3, 1, 2, 0), resumo);
+            Assert.Equal(new ResumoProcessamento(3, 1, 1, 1, 0), resumo);
 
             await using var context = CriarContexto();
             var salvos = await new EmailRepository(context).ObterPorStatusAsync(EmailStatusEnum.Enviado, 10, _ct);
@@ -128,6 +130,66 @@ namespace EmailSender.IntegrationTests
             Assert.Single(salvo.Tentativas);
         }
 
+        [Fact]
+        public async Task SenderFalhaDuasVezesEDepoisEnvia_DeveGravarTresTentativasEStatusEnviado()
+        {
+            var email = (await CriarPendentesAsync(1)).Single();
+            _sender.Sequencia[email.Destinatario] = new Queue<Func<ResultadoEnvio>>([
+                () => throw new FalhaTemporariaEnvioException("fora"),
+                () => throw new FalhaTemporariaEnvioException("fora"),
+                () => new ResultadoEnvio(true, null)]);
+            var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+            await using var provider = CriarProvider(clock);
+            var processador = provider.GetRequiredService<ProcessarEmailsPendentesHandler>();
+
+            var c1 = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
+            var c1b = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct); // ainda não venceu
+            clock.Advance(TimeSpan.FromSeconds(15));
+            var c2 = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
+            clock.Advance(TimeSpan.FromSeconds(60));
+            var c3 = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
+
+            Assert.Equal(new ResumoProcessamento(1, 0, 0, 1, 0), c1);
+            Assert.Equal(new ResumoProcessamento(0, 0, 0, 0, 0), c1b);
+            Assert.Equal(new ResumoProcessamento(1, 0, 0, 1, 0), c2);
+            Assert.Equal(new ResumoProcessamento(1, 1, 0, 0, 0), c3);
+
+            await using var context = CriarContexto();
+            var salvo = await new EmailRepository(context).ObterPorIdAsync(email.Id, _ct);
+            Assert.Equal(EmailStatusEnum.Enviado, salvo!.Status);
+            Assert.Equal(3, salvo.Tentativas.Count);
+            Assert.Null(salvo.ProximaTentativaEm);
+            var linhas = await context.Database.SqlQuery<int>($"SELECT COUNT(*) AS Value FROM TentativasEnvio WHERE EmailId = {email.Id}").SingleAsync(_ct);
+            Assert.Equal(3, linhas);
+            Assert.Equal(3, _sender.Envios);
+        }
+
+        [Fact]
+        public async Task SenderSempreTemporario_DeveTerminarFalhouAposMaxTentativas()
+        {
+            var email = (await CriarPendentesAsync(1)).Single();
+            _sender.Excecoes[email.Destinatario] = new FalhaTemporariaEnvioException("fora");
+            var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+            await using var provider = CriarProvider(clock);
+            var processador = provider.GetRequiredService<ProcessarEmailsPendentesHandler>();
+
+            for (var i = 0; i < 3; i++)
+            {
+                await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
+                clock.Advance(TimeSpan.FromSeconds(60));
+            }
+            var extra = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
+
+            Assert.Equal(new ResumoProcessamento(0, 0, 0, 0, 0), extra);
+            Assert.Equal(3, _sender.Envios);
+
+            await using var context = CriarContexto();
+            var salvo = await new EmailRepository(context).ObterPorIdAsync(email.Id, _ct);
+            Assert.Equal(EmailStatusEnum.Falhou, salvo!.Status);
+            Assert.Equal(3, salvo.Tentativas.Count);
+            Assert.Null(salvo.ProximaTentativaEm);
+        }
+
         private sealed record LinhaTentativa(Guid EmailId, int Numero, bool Sucesso, string? CodigoErro);
 
         private sealed class FakeEmailSender : IEmailSender
@@ -136,6 +198,7 @@ namespace EmailSender.IntegrationTests
 
             public ConcurrentDictionary<string, ResultadoEnvio> Resultados { get; } = new();
             public ConcurrentDictionary<string, Exception> Excecoes { get; } = new();
+            public ConcurrentDictionary<string, Queue<Func<ResultadoEnvio>>> Sequencia { get; } = new();
             public TimeSpan Atraso { get; set; }
             public int Envios => _envios;
 
@@ -144,6 +207,9 @@ namespace EmailSender.IntegrationTests
                 Interlocked.Increment(ref _envios);
                 if (Atraso > TimeSpan.Zero)
                     await Task.Delay(Atraso, ct);
+
+                if (Sequencia.TryGetValue(email.Destinatario, out var fila) && fila.Count > 0)
+                    return fila.Dequeue()();
 
                 if (Excecoes.TryGetValue(email.Destinatario, out var excecao))
                     throw excecao;

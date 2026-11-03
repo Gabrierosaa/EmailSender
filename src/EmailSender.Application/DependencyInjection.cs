@@ -1,4 +1,5 @@
-﻿using EmailSender.Application.DTOs;
+﻿using EmailSender.Application.Abstractions;
+using EmailSender.Application.DTOs;
 using EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes;
 using EmailSender.Application.Emails.Commands.RegistrarEmail;
 using EmailSender.Application.Emails.Queries.ConsultarStatus;

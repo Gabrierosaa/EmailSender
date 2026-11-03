@@ -4,6 +4,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
     {
         Enviado,
         Falhou,
+        Reagendado,
         Ignorado
     }
 }
