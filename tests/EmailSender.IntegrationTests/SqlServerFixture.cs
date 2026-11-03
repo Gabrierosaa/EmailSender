@@ -2,7 +2,6 @@ using Testcontainers.MsSql;
 
 namespace EmailSender.IntegrationTests
 {
-    /// <summary>Um SQL Server (Testcontainers) compartilhado por todos os testes de endpoint.</summary>
     public sealed class SqlServerFixture : IAsyncLifetime
     {
         private readonly MsSqlContainer _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04").Build();

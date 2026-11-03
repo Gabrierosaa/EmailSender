@@ -66,6 +66,60 @@ namespace EmailSender.Application.Tests
             Assert.Equal(0, _unitOfWork.Commits);
         }
 
+        [Theory]
+        [InlineData("")]
+        [InlineData("sem-arroba")]
+        public async Task Handle_DestinatarioInvalido_DeveLancarValidationExceptionEmVezDeDomainException(string destinatario)
+        {
+            await AssertValidationAsync(Valido() with { Destinatario = destinatario });
+        }
+
+        [Fact]
+        public async Task Handle_DestinatarioAcimaDe254_DeveLancarValidationException()
+        {
+            await AssertValidationAsync(Valido() with { Destinatario = new string('a', 250) + "@x.com" });
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task Handle_AssuntoVazio_DeveLancarValidationException(string assunto)
+        {
+            await AssertValidationAsync(Valido() with { Assunto = assunto });
+        }
+
+        [Fact]
+        public async Task Handle_AssuntoAcimaDe300_DeveLancarValidationException()
+        {
+            await AssertValidationAsync(Valido() with { Assunto = new string('a', 301) });
+        }
+
+        [Fact]
+        public async Task Handle_RemetenteVazio_DeveLancarValidationException()
+        {
+            await AssertValidationAsync(Valido() with { RemetenteNome = "" });
+        }
+
+        [Fact]
+        public async Task Handle_RemetenteAcimaDe200_DeveLancarValidationException()
+        {
+            await AssertValidationAsync(Valido() with { RemetenteNome = new string('a', 201) });
+        }
+
+        [Fact]
+        public async Task Handle_SemCorpo_DeveLancarValidationException()
+        {
+            await AssertValidationAsync(Valido() with { CorpoHtml = null, CorpoTexto = " " });
+        }
+
+        private async Task AssertValidationAsync(CriarEmailRequest request)
+        {
+            await Assert.ThrowsAsync<ValidationException>(() => _handler.HandleAsync(request, CancellationToken.None));
+
+            Assert.Empty(_lotes.Adicionados);
+            Assert.Equal(0, _unitOfWork.Commits);
+        }
+
         [Fact]
         public async Task Handle_DeveGerarIdsDiferentesACadaChamada()
         {

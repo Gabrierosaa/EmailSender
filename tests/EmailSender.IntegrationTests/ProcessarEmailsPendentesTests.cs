@@ -38,6 +38,7 @@ namespace EmailSender.IntegrationTests
             services.AddSingleton(clock ?? TimeProvider.System);
             services.AddSingleton(retry ?? PoliticaRetry.Padrao);
             services.AddScoped<ProcessarEmailHandler>();
+            services.AddSingleton<FluentValidation.IValidator<ProcessarEmailsPendentesCommand>, ProcessarEmailsPendentesCommandValidator>();
             services.AddSingleton<ProcessarEmailsPendentesHandler>();
             return services.BuildServiceProvider();
         }
@@ -143,7 +144,7 @@ namespace EmailSender.IntegrationTests
             var processador = provider.GetRequiredService<ProcessarEmailsPendentesHandler>();
 
             var c1 = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
-            var c1b = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct); // ainda não venceu
+            var c1b = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
             clock.Advance(TimeSpan.FromSeconds(15));
             var c2 = await processador.HandleAsync(new ProcessarEmailsPendentesCommand(), _ct);
             clock.Advance(TimeSpan.FromSeconds(60));
@@ -191,33 +192,5 @@ namespace EmailSender.IntegrationTests
         }
 
         private sealed record LinhaTentativa(Guid EmailId, int Numero, bool Sucesso, string? CodigoErro);
-
-        private sealed class FakeEmailSender : IEmailSender
-        {
-            private int _envios;
-
-            public ConcurrentDictionary<string, ResultadoEnvio> Resultados { get; } = new();
-            public ConcurrentDictionary<string, Exception> Excecoes { get; } = new();
-            public ConcurrentDictionary<string, Queue<Func<ResultadoEnvio>>> Sequencia { get; } = new();
-            public TimeSpan Atraso { get; set; }
-            public int Envios => _envios;
-
-            public async Task<ResultadoEnvio> EnviarAsync(Email email, LoteEnvio lote, CancellationToken ct)
-            {
-                Interlocked.Increment(ref _envios);
-                if (Atraso > TimeSpan.Zero)
-                    await Task.Delay(Atraso, ct);
-
-                if (Sequencia.TryGetValue(email.Destinatario, out var fila) && fila.Count > 0)
-                    return fila.Dequeue()();
-
-                if (Excecoes.TryGetValue(email.Destinatario, out var excecao))
-                    throw excecao;
-
-                return Resultados.TryGetValue(email.Destinatario, out var resultado)
-                    ? resultado
-                    : new ResultadoEnvio(true, null);
-            }
-        }
     }
 }

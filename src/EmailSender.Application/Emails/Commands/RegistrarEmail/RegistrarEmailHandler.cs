@@ -6,9 +6,6 @@ using FluentValidation;
 
 namespace EmailSender.Application.Emails.Commands.RegistrarEmail
 {
-    /// <summary>
-    /// Registra um e-mail como lote unitário (status Pendente). Só persiste: não envia por SMTP nem publica em fila.
-    /// </summary>
     public sealed class RegistrarEmailHandler
     {
         private readonly ILoteEnvioRepository _lotes;
@@ -25,7 +22,6 @@ namespace EmailSender.Application.Emails.Commands.RegistrarEmail
             _validator = validator;
         }
 
-        /// <exception cref="ValidationException">Quando a requisição é inválida.</exception>
         public async Task<CriarEmailResponse> HandleAsync(CriarEmailRequest request, CancellationToken ct)
         {
             await _validator.ValidateAndThrowAsync(request, ct);

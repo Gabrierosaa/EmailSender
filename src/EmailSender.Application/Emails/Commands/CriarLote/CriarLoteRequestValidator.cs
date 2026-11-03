@@ -6,7 +6,6 @@ using FluentValidation;
 
 namespace EmailSender.Application.Emails.Commands.CriarLote
 {
-    /// <summary>Valida o lote inteiro e acumula todos os erros numa única resposta (tudo ou nada).</summary>
     public sealed class CriarLoteRequestValidator : AbstractValidator<CriarLoteRequest>
     {
         public CriarLoteRequestValidator()

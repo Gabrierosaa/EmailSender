@@ -21,6 +21,7 @@ namespace EmailSender.Application
             services.AddScoped<CriarLoteHandler>();
             services.AddScoped<ConsultarLoteHandler>();
             services.AddScoped<ProcessarEmailHandler>();
+            services.AddSingleton<IValidator<ProcessarEmailsPendentesCommand>, ProcessarEmailsPendentesCommandValidator>();
             services.AddSingleton<IProcessadorEmailsPendentes, ProcessarEmailsPendentesHandler>();
             services.TryAddSingleton(TimeProvider.System);
             services.AddScoped<ConsultarStatusHandler>();

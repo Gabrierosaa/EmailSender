@@ -92,7 +92,6 @@ namespace EmailSender.Application.Tests
             Assert.Null(resultado);
         }
 
-        // O contrato da API expõe o nome do enum como texto: renomear um membro deve quebrar este teste.
         [Fact]
         public void ContratoDaApi_TextosDeStatusSaoOsEsperados()
         {

@@ -32,7 +32,8 @@ namespace EmailSender.Application.Tests
             _handler = new ProcessarEmailsPendentesHandler(
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 TimeProvider.System,
-                NullLogger<ProcessarEmailsPendentesHandler>.Instance);
+                NullLogger<ProcessarEmailsPendentesHandler>.Instance,
+                new ProcessarEmailsPendentesCommandValidator());
 
             _lotes.ObterPorIdAsync(_lote.Id, Arg.Any<CancellationToken>()).Returns(_lote);
         }
@@ -96,6 +97,102 @@ namespace EmailSender.Application.Tests
             var resumo = await _handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
 
             Assert.Equal(new ResumoProcessamento(2, 1, 1, 0, 0), resumo);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(1001)]
+        public async Task LimiteInvalido_DeveLancarValidationException_SemConsultarORepositorio(int limite)
+        {
+            await Assert.ThrowsAsync<FluentValidation.ValidationException>(() =>
+                _handler.HandleAsync(new ProcessarEmailsPendentesCommand(limite), CancellationToken.None));
+
+            await _emails.DidNotReceiveWithAnyArgs().ObterPendentesParaEnvioAsync(default, default, default);
+        }
+
+        [Fact]
+        public async Task CancelamentoDuranteOCiclo_DevePropagar()
+        {
+            CriarPendentes(2);
+            using var cts = new CancellationTokenSource();
+            _sender.EnviarAsync(Arg.Any<Email>(), Arg.Any<LoteEnvio>(), Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                    cts.Cancel();
+                    return new ResultadoEnvio(true, null);
+                });
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                _handler.HandleAsync(new ProcessarEmailsPendentesCommand(), cts.Token));
+        }
+
+        [Fact]
+        public async Task ConflitoDeConcorrencia_DeveContarEmIgnorados()
+        {
+            var emails = CriarPendentes(2);
+            var uow = Substitute.For<IUnitOfWork>();
+            uow.CommitAsync(Arg.Any<CancellationToken>())
+                .Returns<int>(_ => throw new EmailSender.Domain.Exceptions.ConflitoConcorrenciaException("conflito"));
+            var services = new ServiceCollection();
+            services.AddSingleton(_emails);
+            services.AddSingleton(_lotes);
+            services.AddSingleton(uow);
+            services.AddSingleton(_sender);
+            services.AddSingleton(TimeProvider.System);
+            services.AddSingleton(PoliticaRetry.Padrao);
+            services.AddScoped<ProcessarEmailHandler>();
+            var handler = new ProcessarEmailsPendentesHandler(
+                services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+                TimeProvider.System,
+                NullLogger<ProcessarEmailsPendentesHandler>.Instance,
+                new ProcessarEmailsPendentesCommandValidator());
+
+            var resumo = await handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
+
+            Assert.Equal(new ResumoProcessamento(2, 0, 0, 0, 2), resumo);
+            await _sender.DidNotReceiveWithAnyArgs().EnviarAsync(default!, default!, default);
+        }
+
+        [Fact]
+        public async Task FalhaTemporaria_DeveContarEmReagendados()
+        {
+            CriarPendentes(1);
+            _sender.EnviarAsync(Arg.Any<Email>(), Arg.Any<LoteEnvio>(), Arg.Any<CancellationToken>())
+                .Returns<ResultadoEnvio>(_ => throw new FalhaTemporariaEnvioException("timeout"));
+
+            var resumo = await _handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
+
+            Assert.Equal(new ResumoProcessamento(1, 0, 0, 1, 0), resumo);
+        }
+
+        [Fact]
+        public async Task CadaEmail_DeveSerProcessadoEmUmEscopoNovo()
+        {
+            var emails = CriarPendentes(3);
+            _sender.EnviarAsync(Arg.Any<Email>(), Arg.Any<LoteEnvio>(), Arg.Any<CancellationToken>())
+                .Returns(new ResultadoEnvio(true, null));
+            var escopos = new List<IServiceScope>();
+            var factory = Substitute.For<IServiceScopeFactory>();
+            var real = new ServiceCollection()
+                .AddSingleton(_emails).AddSingleton(_lotes).AddSingleton(Substitute.For<IUnitOfWork>())
+                .AddSingleton(_sender).AddSingleton(TimeProvider.System).AddSingleton(PoliticaRetry.Padrao)
+                .AddScoped<ProcessarEmailHandler>()
+                .BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+            factory.CreateScope().Returns(_ =>
+            {
+                var s = real.CreateScope();
+                escopos.Add(s);
+                return s;
+            });
+            var handler = new ProcessarEmailsPendentesHandler(
+                factory, TimeProvider.System,
+                NullLogger<ProcessarEmailsPendentesHandler>.Instance,
+                new ProcessarEmailsPendentesCommandValidator());
+
+            await handler.HandleAsync(new ProcessarEmailsPendentesCommand(), CancellationToken.None);
+
+            Assert.Equal(emails.Count + 1, escopos.Count);
         }
 
         [Fact]
