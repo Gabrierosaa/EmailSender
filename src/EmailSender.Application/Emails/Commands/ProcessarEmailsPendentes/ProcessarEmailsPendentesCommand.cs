@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
+﻿namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
 {
-    internal class ProcessarEmailsPendentesCommand
-    {
-    }
+    public sealed record ProcessarEmailsPendentesCommand(int Limite = 50);
+
+    public sealed record ResumoProcessamento(int Processados, int Enviados, int Falhos, int Ignorados);
 }

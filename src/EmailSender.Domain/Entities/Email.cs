@@ -49,5 +49,10 @@ namespace EmailSender.Domain.Entities
             return tentativa;
         }
 
+        public TentativaEnvio RegistrarSucesso(DateTimeOffset iniciadaEm)
+            => AdicionarTentativa(iniciadaEm, sucesso: true);
+
+        public TentativaEnvio RegistrarFalha(DateTimeOffset iniciadaEm, string codigoErro)
+            => AdicionarTentativa(iniciadaEm, sucesso: false, codigoErro);
     }
 }

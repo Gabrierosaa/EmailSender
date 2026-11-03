@@ -1,7 +1,9 @@
 ﻿using EmailSender.Application.DTOs;
+using EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes;
 using EmailSender.Application.Emails.Commands.RegistrarEmail;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace EmailSender.Application
 {
@@ -11,6 +13,9 @@ namespace EmailSender.Application
         {
             services.AddSingleton<IValidator<CriarEmailRequest>, CriarEmailRequestValidator>();
             services.AddScoped<RegistrarEmailHandler>();
+            services.AddScoped<ProcessarEmailHandler>();
+            services.AddSingleton<ProcessarEmailsPendentesHandler>();
+            services.TryAddSingleton(TimeProvider.System);
 
             return services;
         }

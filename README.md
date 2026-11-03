@@ -171,6 +171,25 @@ Os TTLs ficam em configuração (valores sugeridos).
 
 **Consumo:** ack manual (só após gravar o resultado), prefetch configurável (sugestão: 10) e controle de taxa para respeitar o limite do provedor.
 
+### Processamento de e-mails pendentes
+
+O `ProcessarEmailsPendentesHandler` lê os Ids dos e-mails `Pendente` (limite padrão: 50) e processa cada um em um escopo próprio (um `DbContext` por e-mail) com o `ProcessarEmailHandler`. Um erro inesperado em um e-mail é logado (só o Id) e contado como falho, e o laço segue. Falhas de banco (`DbException`) e cancelamento não são isolados: propagam.
+
+Fluxo de status: **Pendente → Enfileirado → Enviado | Falhou**.
+
+1. O e-mail é carregado; se não existe ou não está `Pendente`, o resultado é `Ignorado`.
+2. `Enfileirar()` + commit "reserva" o e-mail pelo `RowVersion`. Se outro processo reservou antes, o commit lança `ConflitoConcorrenciaException` (traduzida de `DbUpdateConcurrencyException` no `UnitOfWork`) e o resultado é `Ignorado`, sem envio.
+3. O envio é feito pelo `IEmailSender` e a tentativa é registrada, seguida de um segundo commit.
+
+| Situação | Resultado | `CodigoErro` |
+|----------|-----------|--------------|
+| `ResultadoEnvio.Sucesso = true` | `Enviado` | — |
+| `ResultadoEnvio.Sucesso = false` | `Falhou` | o código recebido (máx. 100 caracteres; vazio vira `ERRO_INESPERADO`) |
+| `FalhaTemporariaEnvioException` | `Falhou` | `SMTP_INDISPONIVEL` |
+| Outra exceção (exceto `OperationCanceledException`) | `Falhou` | `ERRO_INESPERADO` |
+
+> **Limitação conhecida:** se o processo cair entre o commit da reserva (passo 2) e o registro do resultado, o e-mail fica `Enfileirado` sem tentativa. A reconciliação desse caso não faz parte desta etapa.
+
 ## Modelo de dados
 
 Três tabelas: `LoteEnvio` (1) → (N) `Email` (1) → (N) `TentativaEnvio`.
