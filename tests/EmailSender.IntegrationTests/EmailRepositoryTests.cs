@@ -2,23 +2,28 @@ using EmailSender.Domain.Entities;
 using EmailSender.Domain.Enum;
 using EmailSender.Infrastructure.Persistence;
 using EmailSender.Infrastructure.Persistence.Repositories;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace EmailSender.IntegrationTests
 {
+    [Collection(SqlServerCollection.Nome)]
     public class EmailRepositoryTests : IAsyncLifetime
     {
         private readonly string _database = $"EmailSenderTests_{Guid.NewGuid():N}";
         private readonly CancellationToken _ct = CancellationToken.None;
+        private readonly string _servidor;
 
-        // Sobrescrevível via variável de ambiente (ex.: CI com SQL Server em container).
-        private static readonly string _servidor = Environment.GetEnvironmentVariable("EMAILSENDER_TESTS_SQLSERVER")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Trusted_Connection=True;TrustServerCertificate=True";
+        public EmailRepositoryTests(SqlServerFixture sql)
+        {
+            _servidor = sql.ConnectionString;
+        }
 
         private AppDbContext CriarContexto()
         {
+            var connectionString = new SqlConnectionStringBuilder(_servidor) { InitialCatalog = _database }.ConnectionString;
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlServer($"{_servidor.TrimEnd(';')};Database={_database}")
+                .UseSqlServer(connectionString)
                 .Options;
             return new AppDbContext(options);
         }
@@ -155,6 +160,47 @@ namespace EmailSender.IntegrationTests
             var resultado = await new EmailRepository(leitura).ObterPorStatusAsync(EmailStatusEnum.Pendente, 10, _ct);
 
             Assert.Equal(ids, resultado.Select(e => e.Id));
+        }
+
+        [Fact]
+        public async Task LoteUnitario_DevePersistirLoteComUmEmailPendente()
+        {
+            var lote = LoteEnvio.CriarUnitario("Assunto", "Remetente", "a@teste.com",
+                nomeDestinatario: "Fulano", corpoTexto: "Corpo");
+
+            await using (var context = CriarContexto())
+            {
+                await new LoteEnvioRepository(context).AdicionarAsync(lote, _ct);
+                await new UnitOfWork(context).CommitAsync(_ct);
+            }
+
+            await using (var context = CriarContexto())
+            {
+                var salvo = await new LoteEnvioRepository(context).ObterPorIdAsync(lote.Id, _ct);
+
+                Assert.NotNull(salvo);
+                var email = Assert.Single(salvo.Emails);
+                Assert.Equal("a@teste.com", email.Destinatario);
+                Assert.Equal(EmailStatusEnum.Pendente, email.Status);
+                Assert.Empty(email.Tentativas);
+
+                var linha = await context.Database
+                    .SqlQuery<string>($"SELECT Status AS Value FROM Emails WHERE LoteId = {lote.Id}")
+                    .SingleAsync();
+                Assert.Equal("Pendente", linha);
+            }
+        }
+
+        [Fact]
+        public async Task MesmoDestinatarioNoMesmoLote_DeveSerRejeitadoPeloBanco()
+        {
+            var lote = await SalvarLoteAsync();
+            await using var context = CriarContexto();
+            var repo = new EmailRepository(context);
+            await repo.AdicionarAsync(new Email(lote.Id, "dup@teste.com", "A", "{}"), _ct);
+            await repo.AdicionarAsync(new Email(lote.Id, "dup@teste.com", "B", "{}"), _ct);
+
+            await Assert.ThrowsAsync<DbUpdateException>(() => new UnitOfWork(context).CommitAsync(_ct));
         }
 
         [Fact]

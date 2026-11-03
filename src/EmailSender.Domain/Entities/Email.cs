@@ -1,6 +1,6 @@
 ﻿using EmailSender.Domain.Enum;
 using EmailSender.Domain.Exceptions;
-using System.Net.Mail;
+using EmailSender.Domain.ValueObjects;
 
 namespace EmailSender.Domain.Entities
 {
@@ -22,12 +22,10 @@ namespace EmailSender.Domain.Entities
         {
             Id = Guid.NewGuid();
             LoteId = loteId;
-            Destinatario = destinatario;
+            Destinatario = EnderecoEmail.Criar(destinatario).Valor;
             NomeDestinatario = nomeDestinatario ?? string.Empty;
             VariavelJson = variavelJson ?? "{}";
             Status = EmailStatusEnum.Pendente;
-
-            Validacao();
         }
 
         public void Enfileirar()
@@ -49,18 +47,6 @@ namespace EmailSender.Domain.Entities
             Status = sucesso ? EmailStatusEnum.Enviado : EmailStatusEnum.Falhou;
 
             return tentativa;
-        }
-
-        private void Validacao()
-        {
-            if(Id == Guid.Empty)          
-                throw new DomainException("O ID do email é obrigatório.");
-
-            if(string.IsNullOrWhiteSpace(Destinatario))          
-                throw new DomainException("O destinatário do email é obrigatório.");
-
-            if (!MailAddress.TryCreate(Destinatario, out _))
-                throw new DomainException("O destinatário informado não é um e-mail válido.");
         }
 
     }

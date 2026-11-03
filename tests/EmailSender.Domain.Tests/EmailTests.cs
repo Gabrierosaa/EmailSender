@@ -33,6 +33,29 @@ namespace EmailSender.Domain.Tests
         }
 
         [Fact]
+        public void Construtor_DeveNascerPendenteComZeroTentativas()
+        {
+            var email = CriarEmail();
+
+            Assert.Equal(EmailStatusEnum.Pendente, email.Status);
+            Assert.Empty(email.Tentativas);
+        }
+
+        [Fact]
+        public void Status_NaoDeveTerSetterPublico()
+        {
+            var setter = typeof(Email).GetProperty(nameof(Email.Status))!.SetMethod;
+
+            Assert.True(setter is null || !setter.IsPublic);
+        }
+
+        [Fact]
+        public void Construtor_DeveAparaDestinatario()
+        {
+            Assert.Equal("a@teste.com", CriarEmail("  a@teste.com ").Destinatario);
+        }
+
+        [Fact]
         public void Construtor_DeveGerarIdsDiferentes()
         {
             Assert.NotEqual(CriarEmail().Id, CriarEmail().Id);

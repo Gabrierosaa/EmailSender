@@ -14,7 +14,7 @@ namespace EmailSender.Infrastructure.Persistence.Configurations
             builder.Property(l => l.Id).ValueGeneratedNever();
 
             builder.Property(l => l.IdempotencyKey).HasMaxLength(100);
-            builder.Property(l => l.RequestHash).HasMaxLength(128);
+            builder.Property(l => l.RequestHash).HasMaxLength(64);
 
             builder.Property(l => l.Assunto)
                 .IsRequired()
@@ -41,6 +41,7 @@ namespace EmailSender.Infrastructure.Persistence.Configurations
 
             builder.HasIndex(l => l.IdempotencyKey)
                 .IsUnique()
+                .HasDatabaseName("UQ_Lote_IdempotencyKey")
                 .HasFilter("[IdempotencyKey] IS NOT NULL");
         }
     }
