@@ -82,6 +82,32 @@ namespace EmailSender.IntegrationTests
         }
 
         [Fact]
+        public async Task ObterPorId_DeveCarregarTodasAsTentativas()
+        {
+            var lote = await SalvarLoteAsync();
+            var email = new Email(lote.Id, "t@teste.com", "Nome", "{}");
+            email.Enfileirar();
+            email.AdicionarTentativa(DateTimeOffset.UtcNow.AddMinutes(-5), sucesso: false, "SMTP_TIMEOUT");
+            email.Enfileirar();
+            email.AdicionarTentativa(DateTimeOffset.UtcNow, sucesso: true);
+
+            await using (var context = CriarContexto())
+            {
+                await new EmailRepository(context).AdicionarAsync(email, _ct);
+                await new UnitOfWork(context).CommitAsync(_ct);
+            }
+
+            await using (var context = CriarContexto())
+            {
+                var salvo = await new EmailRepository(context).ObterPorIdAsync(email.Id, _ct);
+
+                Assert.NotNull(salvo);
+                Assert.Equal(new[] { 1, 2 }, salvo.Tentativas.Select(t => t.Numero).OrderBy(n => n));
+                Assert.Equal("SMTP_TIMEOUT", salvo.Tentativas.Single(t => t.Numero == 1).CodigoErro);
+            }
+        }
+
+        [Fact]
         public async Task ObterPorId_Inexistente_DeveRetornarNulo()
         {
             await using var context = CriarContexto();

@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace EmailSender.Application.DTOs
+﻿namespace EmailSender.Application.DTOs
 {
-    internal class EmailStatusDto
-    {
-    }
+    public sealed record EmailStatusDto(
+        Guid Id,
+        string Status,
+        DateTimeOffset? UltimaTentativaEm,
+        string? UltimoErro);
 }

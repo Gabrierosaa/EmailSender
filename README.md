@@ -226,7 +226,7 @@ Rotas relativas a `/api/v1` (exceto health checks). Todos os endpoints de negóc
 | `POST` | `/lotes` | Cria um lote e enfileira os e-mails (aceita `Idempotency-Key`) | 202, 400, 401, 409, 413, 429, 503 |
 | `GET` | `/lotes/{loteId}` | Resumo do lote com contagem por estado | 200, 401, 404, 429 |
 | `GET` | `/lotes/{loteId}/emails` | Lista paginada (`status`, `pagina`, `tamanho` máx. 100) | 200, 400, 401, 404, 429 |
-| `GET` | `/emails/{emailId}` | Status de um e-mail e histórico de tentativas | 200, 401, 404, 429 |
+| `GET` | `/emails/{id}/status` | Status de um e-mail, data da última tentativa e código do último erro | 200, 404 |
 | `POST` | `/emails/{emailId}/reenfileirar` | Reenfileira um e-mail em `Falhou` (opcional) | 202, 401, 404, 409 |
 | `GET` | `/health/live` · `/health/ready` | Liveness e readiness (banco e RabbitMQ), sem autenticação | 200, 503 |
 

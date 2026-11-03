@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace EmailSender.Application.Emails.Queries.ConsultarStatus
+﻿namespace EmailSender.Application.Emails.Queries.ConsultarStatus
 {
-    internal class ConsultarStatusQuery
-    {
-    }
+    public sealed record ConsultarStatusQuery(Guid Id);
 }
