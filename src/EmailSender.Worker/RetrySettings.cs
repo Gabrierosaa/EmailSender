@@ -8,7 +8,6 @@ public sealed class RetrySettings
     public const string Secao = "Retry";
 
     [Range(1, 10)] public int MaxTentativas { get; set; } = 3;
-    // Sem default: o binder de arrays acrescenta aos elementos existentes, duplicando a lista do appsettings.
     [Required, MinLength(1)] public int[] IntervalosSegundos { get; set; } = [];
 }
 

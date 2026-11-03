@@ -119,7 +119,7 @@ namespace EmailSender.Application.Tests
             _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
                 .Returns<ResultadoEnvio>(_ =>
                 {
-                    _clock.Advance(TimeSpan.FromSeconds(30)); // timeout longo
+                    _clock.Advance(TimeSpan.FromSeconds(30));
                     throw new FalhaTemporariaEnvioException("timeout");
                 });
 
@@ -230,6 +230,72 @@ namespace EmailSender.Application.Tests
                 () => _handler.HandleAsync(_email.Id, CancellationToken.None));
 
             Assert.Empty(_email.Tentativas);
+        }
+
+        [Fact]
+        public async Task LoteInexistente_DeveIgnorarSemEnviar()
+        {
+            _lotes.ObterPorIdAsync(_lote.Id, Arg.Any<CancellationToken>()).Returns((LoteEnvio?)null);
+
+            var resultado = await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(ResultadoProcessamento.Ignorado, resultado);
+            Assert.Equal(EmailStatusEnum.Pendente, _email.Status);
+            await _sender.DidNotReceiveWithAnyArgs().EnviarAsync(default!, default!, default);
+        }
+
+        [Fact]
+        public async Task Envio_DeveOcorrerComEmailJaCommitadoComoEnfileirado()
+        {
+            EmailStatusEnum? statusNoEnvio = null;
+            var commitsNoEnvio = -1;
+            _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                    statusNoEnvio = _email.Status;
+                    commitsNoEnvio = _unitOfWork.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IUnitOfWork.CommitAsync));
+                    return new ResultadoEnvio(true, null);
+                });
+
+            await _handler.HandleAsync(_email.Id, CancellationToken.None);
+
+            Assert.Equal(EmailStatusEnum.Enfileirado, statusNoEnvio);
+            Assert.Equal(1, commitsNoEnvio);
+            await _unitOfWork.Received(2).CommitAsync(Arg.Any<CancellationToken>());
+        }
+
+        [Fact]
+        public async Task CancelamentoDepoisDoEnvio_DeveCommitarOResultadoSemToken()
+        {
+            using var cts = new CancellationTokenSource();
+            _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                    cts.Cancel();
+                    return new ResultadoEnvio(true, null);
+                });
+
+            var resultado = await _handler.HandleAsync(_email.Id, cts.Token);
+
+            Assert.Equal(ResultadoProcessamento.Enviado, resultado);
+            Assert.Equal(EmailStatusEnum.Enviado, _email.Status);
+            await _unitOfWork.Received(1).CommitAsync(Arg.Is<CancellationToken>(t => !t.CanBeCanceled));
+        }
+
+        [Fact]
+        public async Task FalhaDeBancoNoEnvio_DevePropagarSemRegistrarTentativa()
+        {
+            _sender.EnviarAsync(_email, _lote, Arg.Any<CancellationToken>())
+                .Returns<ResultadoEnvio>(_ => throw new BancoIndisponivelException());
+
+            await Assert.ThrowsAsync<BancoIndisponivelException>(
+                () => _handler.HandleAsync(_email.Id, CancellationToken.None));
+
+            Assert.Empty(_email.Tentativas);
+        }
+
+        private sealed class BancoIndisponivelException : System.Data.Common.DbException
+        {
         }
 
         [Fact]

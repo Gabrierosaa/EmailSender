@@ -8,7 +8,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EmailSender.IntegrationTests
 {
-    /// <summary>POST/GET /api/v1/lotes de ponta a ponta: Api real (Kestrel) + SQL Server em container.</summary>
     [Collection(SqlServerCollection.Nome)]
     public class LotesEndpointTests : IAsyncLifetime
     {

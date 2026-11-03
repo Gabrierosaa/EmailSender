@@ -12,7 +12,6 @@ using Microsoft.Extensions.Options;
 
 namespace EmailSender.IntegrationTests
 {
-    // Pré-requisito: docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
     public class SmtpEmailSenderTests
     {
         private static SmtpEmailSender CriarSender(int porta) => new(Options.Create(new SmtpSettings

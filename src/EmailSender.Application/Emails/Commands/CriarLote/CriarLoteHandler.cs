@@ -6,9 +6,6 @@ using FluentValidation;
 
 namespace EmailSender.Application.Emails.Commands.CriarLote
 {
-    /// <summary>
-    /// Cria um lote com todos os destinatários (status Pendente) numa única transação. Só persiste: não envia por SMTP.
-    /// </summary>
     public sealed class CriarLoteHandler
     {
         private readonly ILoteEnvioRepository _lotes;
@@ -25,7 +22,6 @@ namespace EmailSender.Application.Emails.Commands.CriarLote
             _validator = validator;
         }
 
-        /// <exception cref="ValidationException">Quando a requisição é inválida; nada é salvo.</exception>
         public async Task<CriarLoteResponse> HandleAsync(CriarLoteRequest request, CancellationToken ct)
         {
             await _validator.ValidateAndThrowAsync(request, ct);

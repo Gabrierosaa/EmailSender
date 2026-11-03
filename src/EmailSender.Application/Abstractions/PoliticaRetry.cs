@@ -21,7 +21,6 @@ namespace EmailSender.Application.Abstractions
 
         public bool PodeTentarNovamente(int tentativasFeitas) => tentativasFeitas < MaxTentativas;
 
-        // Espera após a n-ésima falha (n >= 1). Se a lista for menor que o necessário, repete o último valor.
         public TimeSpan IntervaloApos(int tentativasFeitas)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(tentativasFeitas, 1);

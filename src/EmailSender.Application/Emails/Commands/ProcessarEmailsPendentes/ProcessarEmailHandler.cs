@@ -8,9 +8,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
 {
-    /// <summary>
-    /// Processa um e-mail Pendente: reserva (Enfileirado), envia e registra a tentativa (Enviado ou Falhou).
-    /// </summary>
     public sealed class ProcessarEmailHandler
     {
         public const string CodigoSmtpIndisponivel = "SMTP_INDISPONIVEL";
@@ -49,7 +46,6 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
             if (email is null || email.Status != EmailStatusEnum.Pendente)
                 return ResultadoProcessamento.Ignorado;
 
-            // Proteção extra: e-mail reagendado só é processado quando a data chegar.
             if (email.ProximaTentativaEm > _clock.GetUtcNow())
                 return ResultadoProcessamento.Ignorado;
 
@@ -57,7 +53,6 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
             if (lote is null)
                 return ResultadoProcessamento.Ignorado;
 
-            // O commit "reserva" o e-mail: o RowVersion garante que só um processamento avança.
             email.Enfileirar();
             try
             {
@@ -71,7 +66,6 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
             var inicio = _clock.GetUtcNow();
             var resultadoEnvio = await EnviarERegistrarAsync(email, lote, inicio, ct);
 
-            // O envio já ocorreu: o registro do resultado não pode ser abortado por cancelamento.
             await _unitOfWork.CommitAsync(CancellationToken.None);
 
             return resultadoEnvio;
@@ -89,7 +83,6 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
                     return ResultadoProcessamento.Enviado;
                 }
 
-                // Falha permanente: sem retry.
                 email.RegistrarFalha(inicio, NormalizarCodigo(resultado.CodigoErro));
                 return ResultadoProcessamento.Falhou;
             }
@@ -101,7 +94,6 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
                 if (!_retry.PodeTentarNovamente(feitas))
                     return ResultadoProcessamento.Falhou;
 
-                // Conta a espera a partir do fim da falha, não do início do envio (um timeout longo consumiria o intervalo).
                 email.AgendarNovaTentativa(_clock.GetUtcNow() + _retry.IntervaloApos(feitas));
                 return ResultadoProcessamento.Reagendado;
             }

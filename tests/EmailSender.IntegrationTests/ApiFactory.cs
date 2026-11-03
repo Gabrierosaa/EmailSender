@@ -1,24 +1,24 @@
 using EmailSender.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EmailSender.IntegrationTests
 {
-    /// <summary>
-    /// Sobe a Api de verdade (Kestrel, para valer o limite de 1 MB) apontando para um banco novo no container.
-    /// SMTP e RabbitMQ são configurados para endereços inalcançáveis: nenhum dos dois está no ar.
-    /// </summary>
     public sealed class ApiFactory : WebApplicationFactory<Program>
     {
         private readonly string _servidor;
         private readonly string _database = $"EmailSenderApi_{Guid.NewGuid():N}";
 
-        public ApiFactory(string connectionStringDoServidor)
+        private readonly Action<IServiceCollection>? _configurarServicos;
+
+        public ApiFactory(string connectionStringDoServidor, Action<IServiceCollection>? configurarServicos = null)
         {
             _servidor = connectionStringDoServidor;
+            _configurarServicos = configurarServicos;
             UseKestrel();
         }
 
@@ -34,9 +34,11 @@ namespace EmailSender.IntegrationTests
             builder.UseSetting("Smtp:RemetenteEndereco", "teste@localhost");
             builder.UseSetting("RabbitMq:Host", "127.0.0.1");
             builder.UseSetting("RabbitMq:Port", "1");
+
+            if (_configurarServicos is not null)
+                builder.ConfigureTestServices(_configurarServicos);
         }
 
-        /// <summary>Sobe o host e cria o schema pelas migrations.</summary>
         public async Task MigrarAsync()
         {
             using var scope = Services.CreateScope();

@@ -371,6 +371,17 @@ Para rodar os testes:
 dotnet test
 ```
 
+Para rodar um projeto só (por exemplo, a camada Application, que roda em menos de 1 s e não precisa de Docker):
+
+```bash
+dotnet test tests/EmailSender.Application.Tests
+dotnet test tests/EmailSender.IntegrationTests
+```
+
+- **Docker:** `EmailSender.IntegrationTests` sobe o SQL Server em contêiner (Testcontainers), então o Docker precisa estar ligado. Os demais projetos não dependem dele.
+- **Cobertura:** `dotnet test tests/EmailSender.Application.Tests --collect:"XPlat Code Coverage"` gera o `coverage.cobertura.xml` em `TestResults`.
+- **Ponta a ponta:** `FluxoPontaAPontaTests` faz POST na Api real, dispara um ciclo de `IProcessadorEmailsPendentes` e confere o `GET .../status` (`Pendente` → `Enviado`/`Falhou`). O SMTP é trocado por um `FakeEmailSender` (via `ApiFactory`), e o ciclo é disparado direto, sem esperar o Worker, para não depender de tempo.
+
 ## Ambientes e execução
 
 Dois ambientes via Docker Compose. A mesma imagem serve aos dois; muda só a configuração.

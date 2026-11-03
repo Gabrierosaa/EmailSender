@@ -4,7 +4,6 @@ using EmailSender.Domain.Repositories;
 
 namespace EmailSender.Application.Emails.Queries.ConsultarLote
 {
-    /// <summary>Único ponto que decide o status do lote a partir da contagem de e-mails por estado.</summary>
     public sealed class ConsultarLoteHandler
     {
         private readonly ILoteEnvioRepository _lotes;

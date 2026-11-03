@@ -12,10 +12,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EmailSender.IntegrationTests
 {
-    /// <summary>
-    /// POST /api/v1/emails de ponta a ponta: Api real (Kestrel) + SQL Server em container.
-    /// SMTP e RabbitMQ não estão no ar em nenhum teste desta classe.
-    /// </summary>
     [Collection(SqlServerCollection.Nome)]
     public class EmailsEndpointTests : IAsyncLifetime
     {
@@ -71,7 +67,6 @@ namespace EmailSender.IntegrationTests
             Assert.Equal(0, emails);
         }
 
-        // ---------- 201 ----------
 
         [Fact]
         public async Task Post_Valido_Retorna201ComIdELocation()
@@ -122,7 +117,6 @@ namespace EmailSender.IntegrationTests
         [Fact]
         public async Task Post_ComSmtpERabbitMqForaDoAr_Retorna201()
         {
-            // A fábrica aponta SMTP e RabbitMQ para 127.0.0.1:1 (ninguém escutando) e este fluxo só registra o e-mail.
             var resposta = await PostarAsync(RequisicaoValida());
 
             Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
@@ -130,7 +124,6 @@ namespace EmailSender.IntegrationTests
             Assert.Equal(1, emails);
         }
 
-        // ---------- GET /{id}/status ----------
 
         [Fact]
         public async Task GetStatus_AposPost_Retorna200ComStatusPendenteESemDestinatario()
@@ -194,7 +187,6 @@ namespace EmailSender.IntegrationTests
             Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
         }
 
-        // ---------- 400 ----------
 
         [Fact]
         public async Task Post_SemCamposObrigatorios_Retorna400ComErrosPorCampoENadaGravado()
@@ -264,7 +256,6 @@ namespace EmailSender.IntegrationTests
             await AssertNadaGravadoAsync();
         }
 
-        // ---------- 413 ----------
 
         [Fact]
         public async Task Post_CorpoAcimaDe1MB_Retorna413ENadaGravado()

@@ -18,7 +18,6 @@ builder.Services.AddOptions<RetrySettings>()
 builder.Services.AddSingleton<IValidateOptions<RetrySettings>, RetrySettingsValidator>();
 
 builder.Services.AddApplication();
-// Registrado depois do AddApplication para sobrescrever o padrão.
 builder.Services.AddSingleton(sp =>
 {
     var s = sp.GetRequiredService<IOptions<RetrySettings>>().Value;
