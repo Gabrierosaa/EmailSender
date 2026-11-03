@@ -10,7 +10,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
     /// Processa um lote de e-mails Pendentes, um escopo (e um DbContext) por e-mail, para que um conflito
     /// ou erro em uma entidade não contamine o commit do próximo.
     /// </summary>
-    public sealed class ProcessarEmailsPendentesHandler
+    public sealed class ProcessarEmailsPendentesHandler : IProcessadorEmailsPendentes
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<ProcessarEmailsPendentesHandler> _logger;

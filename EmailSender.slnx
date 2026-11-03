@@ -11,5 +11,6 @@
     <Project Path="tests/EmailSender.Domain.Tests/EmailSender.Domain.Tests.csproj" />
     <Project Path="tests/EmailSender.Infrastructure.Tests/EmailSender.Infrastructure.Tests.csproj" />
     <Project Path="tests/EmailSender.IntegrationTests/EmailSender.IntegrationTests.csproj" />
+    <Project Path="tests/EmailSender.Worker.Tests/EmailSender.Worker.Tests.csproj" />
   </Folder>
 </Solution>
