@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace EmailSender.Domain.Exceptions
+﻿namespace EmailSender.Domain.Exceptions
 {
-    internal class DomainException
+    public class DomainException : Exception
     {
+        public DomainException(string message) : base (message)
+        {
+        }
     }
 }

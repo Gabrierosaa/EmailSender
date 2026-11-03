@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace EmailSender.Domain.Repositories
+﻿namespace EmailSender.Domain.Repositories
 {
-    internal class IUnitOfWork
+    public interface IUnitOfWork
     {
+        Task<int> CommitAsync(CancellationToken ct);
     }
 }

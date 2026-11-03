@@ -1,6 +1,26 @@
 @EmailSender.Api_HostAddress = http://localhost:5024
 
-GET {{EmailSender.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Registrar e-mail (201 + Location)
+POST {{EmailSender.Api_HostAddress}}/api/v1/emails
+Content-Type: application/json
 
-###
+{
+  "destinatario": "fulano@teste.com",
+  "nomeDestinatario": "Fulano",
+  "assunto": "Olá, {{nome}}",
+  "remetenteNome": "Equipe EmailSender",
+  "replyTo": "suporte@teste.com",
+  "corpoTexto": "Bem-vindo!",
+  "corpoHtml": "<p>Bem-vindo!</p>",
+  "variaveis": { "nome": "Fulano" }
+}
+
+### Requisição inválida (400 com erros por campo)
+POST {{EmailSender.Api_HostAddress}}/api/v1/emails
+Content-Type: application/json
+
+{
+  "destinatario": "invalido",
+  "assunto": "",
+  "remetenteNome": ""
+}
