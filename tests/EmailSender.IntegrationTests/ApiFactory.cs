@@ -30,7 +30,8 @@ namespace EmailSender.IntegrationTests
             builder.UseEnvironment("Testing");
             builder.UseSetting("ConnectionStrings:DefaultConnection", ConnectionString);
             builder.UseSetting("Smtp:Host", "127.0.0.1");
-            builder.UseSetting("Smtp:Port", "1");
+            builder.UseSetting("Smtp:Porta", "1");
+            builder.UseSetting("Smtp:RemetenteEndereco", "teste@localhost");
             builder.UseSetting("RabbitMq:Host", "127.0.0.1");
             builder.UseSetting("RabbitMq:Port", "1");
         }
