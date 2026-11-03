@@ -21,6 +21,7 @@ API para envio de e-mails em lote, de forma assíncrona e confiável. Recebe uma
 - [Observabilidade](#observabilidade)
 - [Testes](#testes)
 - [Ambientes e execução](#ambientes-e-execução)
+- [Configuração SMTP](#configuração-smtp)
 - [Roadmap](#roadmap)
 - [Riscos e decisões em aberto](#riscos-e-decisões-em-aberto)
 
@@ -95,6 +96,7 @@ Cliente ──HTTPS + API Key──▶ API ──grava──▶ SQL Server
 | D08 | SQL Server + EF Core; conteúdo guardado no lote | Assunto e corpo se repetem em até 1.000 e-mails |
 | D09 | Casos de uso como classes simples + `IEmailSender` (MailKit) | Menos "mágica"; Mailpit em dev e SES em prod só trocando configuração |
 | D10 | API Key no cabeçalho, uma por ambiente | Há um único cliente consumidor |
+| D11 | `IEmailSender.EnviarAsync`: SMTP 5xx devolve `ResultadoEnvio(false, "SMTP_<código>")`; falha transitória lança `FalhaTemporariaEnvioException` | Falha permanente é um resultado esperado e vira `Falhou` sem retry; falha transitória é uma exceção que o handler captura (sem depender de MailKit) para acionar o retry. Cancelamento (`OperationCanceledException`) propaga |
 
 **Tecnologias**
 
@@ -351,6 +353,40 @@ docker compose up
 | Logs | Legíveis no console | JSON, com rotação |
 
 **Sugestões para produção:** VPS com Docker Compose (2 GB+ de RAM), GitHub Actions para build/test/imagens, imagens com versão fixa (nunca `latest`) e backup do volume do SQL Server.
+
+## Configuração SMTP
+
+O envio usa a seção `Smtp`, lida por API e Worker (ambos chamam `AddInfrastructure`). Ela é validada na inicialização: sem `Host`, `Porta` válida e `RemetenteEndereco`, a aplicação não sobe.
+
+| Chave | Obrigatória | Descrição |
+|-------|-------------|-----------|
+| `Smtp:Host` | Sim | Servidor SMTP |
+| `Smtp:Porta` | Sim | 1 a 65535 |
+| `Smtp:RemetenteEndereco` | Sim | Endereço do `From` (o nome vem do lote) |
+| `Smtp:Usuario` | Não | Se vazio, não autentica |
+| `Smtp:Senha` | Não | Segredo: nunca no Git |
+| `Smtp:Seguranca` | Não | `SecureSocketOptions` do MailKit; padrão `StartTls` (`None`, `SslOnConnect`, `StartTlsWhenAvailable`, `Auto`) |
+| `Smtp:TimeoutSegundos` | Não | 1 a 300; padrão 30 |
+
+**Dev com Mailpit** (`appsettings.Development.json`, só valores não sensíveis; mensagens em http://localhost:8025):
+
+```json
+"Smtp": {
+  "Host": "localhost",
+  "Porta": 1025,
+  "RemetenteEndereco": "teste@localhost",
+  "Seguranca": "None"
+}
+```
+
+**Credenciais reais em dev** (user-secrets; os dois projetos já têm `UserSecretsId`):
+
+```bash
+dotnet user-secrets set "Smtp:Usuario" "seu-usuario" --project src/EmailSender.Worker
+dotnet user-secrets set "Smtp:Senha" "sua-senha" --project src/EmailSender.Worker
+```
+
+**Prod:** variáveis de ambiente, como `Smtp__Host`, `Smtp__Porta` e `Smtp__Senha`.
 
 ## Roadmap
 

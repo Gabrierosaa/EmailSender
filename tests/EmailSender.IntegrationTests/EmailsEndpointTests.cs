@@ -123,9 +123,6 @@ namespace EmailSender.IntegrationTests
         public async Task Post_ComSmtpERabbitMqForaDoAr_Retorna201()
         {
             // A fábrica aponta SMTP e RabbitMQ para 127.0.0.1:1 (ninguém escutando) e este fluxo só registra o e-mail.
-            using var scope = _factory.Services.CreateScope();
-            Assert.Null(scope.ServiceProvider.GetService<IEmailSender>());
-
             var resposta = await PostarAsync(RequisicaoValida());
 
             Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);

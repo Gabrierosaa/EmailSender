@@ -1,6 +1,9 @@
-﻿using EmailSender.Domain.Repositories;
+﻿using EmailSender.Application.Abstractions;
+using EmailSender.Domain.Repositories;
 using EmailSender.Infrastructure.Persistence;
 using EmailSender.Infrastructure.Persistence.Repositories;
+using EmailSender.Infrastructure.Services;
+using EmailSender.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +22,13 @@ namespace EmailSender.Infrastructure
             services.AddScoped<IEmailRepository, EmailRepository>();
             services.AddScoped<ILoteEnvioRepository, LoteEnvioRepository>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+            services.AddOptions<SmtpSettings>()
+                .Bind(configuration.GetSection(SmtpSettings.Secao))
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
+
+            services.AddScoped<IEmailSender, SmtpEmailSender>();
 
             return services;
         }
