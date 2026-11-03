@@ -104,6 +104,9 @@ namespace EmailSender.Application.Tests
             public Task<LoteEnvio?> ObterPorIdAsync(Guid id, CancellationToken ct) =>
                 Task.FromResult(Adicionados.FirstOrDefault(l => l.Id == id));
 
+            public Task<ResumoLote?> ObterResumoAsync(Guid id, CancellationToken ct) =>
+                Task.FromResult<ResumoLote?>(null);
+
             public Task<LoteEnvio?> ObterPorIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct) =>
                 Task.FromResult(Adicionados.FirstOrDefault(l => l.IdempotencyKey == idempotencyKey));
         }

@@ -229,8 +229,8 @@ Rotas relativas a `/api/v1` (exceto health checks). Todos os endpoints de negóc
 
 | Método | Rota | Descrição | Respostas |
 |--------|------|-----------|-----------|
-| `POST` | `/lotes` | Cria um lote e enfileira os e-mails (aceita `Idempotency-Key`) | 202, 400, 401, 409, 413, 429, 503 |
-| `GET` | `/lotes/{loteId}` | Resumo do lote com contagem por estado | 200, 401, 404, 429 |
+| `POST` | `/lotes` | Cria um lote (tudo ou nada, máx. 1.000 destinatários) com os e-mails `Pendente` | 202, 400, 413 |
+| `GET` | `/lotes/{id}` | Resumo do lote com contagem por estado (ver abaixo) | 200, 404 |
 | `GET` | `/lotes/{loteId}/emails` | Lista paginada (`status`, `pagina`, `tamanho` máx. 100) | 200, 400, 401, 404, 429 |
 | `GET` | `/emails/{id}/status` | Status de um e-mail, data da última tentativa e código do último erro | 200, 404 |
 | `POST` | `/emails/{emailId}/reenfileirar` | Reenfileira um e-mail em `Falhou` (opcional) | 202, 401, 404, 409 |
@@ -263,15 +263,41 @@ Resposta `202 Accepted`:
 { "loteId": "3f2b9c1e-...", "totalDestinatarios": 2, "status": "Processando" }
 ```
 
-Erro de validação `400 Bad Request` (ProblemDetails):
+O header `Location` aponta para `/api/v1/lotes/{loteId}`. A criação é **tudo ou nada**: se qualquer item for inválido, nada é salvo.
+
+Erro de validação `400 Bad Request` (ProblemDetails); todos os erros do lote voltam juntos, com o índice do item:
 
 ```json
 {
-  "title": "Erro de validação",
+  "title": "Um ou mais campos são inválidos.",
   "status": 400,
-  "errors": { "destinatarios[1].email": ["Endereço inválido."] }
+  "errors": {
+    "destinatarios[1].email": ["O destinatário informado não é um e-mail válido."],
+    "destinatarios[3].email": ["Destinatário duplicado no lote."]
+  }
 }
 ```
+
+Corpo acima de 1 MB: `413 Payload Too Large` (ProblemDetails). Um lote de 1.000 destinatários cabe no limite.
+
+**Consultar lote — `GET /lotes/{id}`**
+
+```json
+{
+  "id": "3f2b9c1e-...",
+  "totalDestinatarios": 3,
+  "pendentes": 1,
+  "enviados": 1,
+  "falhos": 1,
+  "status": "Processando",
+  "criadoEm": "2026-11-03T12:00:00+00:00"
+}
+```
+
+- `pendentes` = e-mails `Pendente` + `Enfileirado`; `totalDestinatarios` = pendentes + enviados + falhos.
+- `status`: `Processando` se `pendentes > 0`; senão `Concluido` se `falhos == 0`; senão `ConcluidoComFalhas`. Essa regra fica só no `ConsultarLoteHandler`.
+- Id inexistente, ou que não seja um GUID (`/lotes/abc`), retorna `404`.
+- Falha temporária de SMTP mantém o e-mail `Pendente` (com nova tentativa agendada), então o lote segue `Processando` até as tentativas se esgotarem.
 
 ## Estrutura do projeto
 

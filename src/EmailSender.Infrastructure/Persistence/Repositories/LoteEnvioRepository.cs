@@ -25,6 +25,27 @@ namespace EmailSender.Infrastructure.Persistence.Repositories
                 .FirstOrDefaultAsync(l => l.Id == id, ct);
         }
 
+        public async Task<ResumoLote?> ObterResumoAsync(Guid id, CancellationToken ct)
+        {
+            var lote = await _context.Lotes
+                .AsNoTracking()
+                .Where(l => l.Id == id)
+                .Select(l => new { l.Id, l.CriadoEm })
+                .FirstOrDefaultAsync(ct);
+
+            if (lote is null)
+                return null;
+
+            var contagens = await _context.Emails
+                .AsNoTracking()
+                .Where(e => e.LoteId == id)
+                .GroupBy(e => e.Status)
+                .Select(g => new { g.Key, Total = g.Count() })
+                .ToListAsync(ct);
+
+            return new ResumoLote(lote.Id, lote.CriadoEm, contagens.ToDictionary(c => c.Key, c => c.Total));
+        }
+
         public Task<LoteEnvio?> ObterPorIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct)
         {
             return _context.Lotes
