@@ -1,4 +1,6 @@
+using EmailSender.Domain.Exceptions;
 using EmailSender.Domain.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace EmailSender.Infrastructure.Persistence
 {
@@ -11,9 +13,17 @@ namespace EmailSender.Infrastructure.Persistence
             _context = context;
         }
 
-        public Task<int> CommitAsync(CancellationToken ct)
+        public async Task<int> CommitAsync(CancellationToken ct)
         {
-            return _context.SaveChangesAsync(ct);
+            try
+            {
+                return await _context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                throw new ConflitoConcorrenciaException(
+                    "O registro foi alterado por outro processo.", ex);
+            }
         }
     }
 }

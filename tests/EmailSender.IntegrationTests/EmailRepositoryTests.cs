@@ -1,5 +1,6 @@
 using EmailSender.Domain.Entities;
 using EmailSender.Domain.Enum;
+using EmailSender.Domain.Exceptions;
 using EmailSender.Infrastructure.Persistence;
 using EmailSender.Infrastructure.Persistence.Repositories;
 using Microsoft.Data.SqlClient;
@@ -164,7 +165,7 @@ namespace EmailSender.IntegrationTests
             await new UnitOfWork(contextoA).CommitAsync(_ct);
 
             emailB.Enfileirar();
-            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => new UnitOfWork(contextoB).CommitAsync(_ct));
+            await Assert.ThrowsAsync<ConflitoConcorrenciaException>(() => new UnitOfWork(contextoB).CommitAsync(_ct));
         }
 
         [Fact]

@@ -204,6 +204,56 @@ namespace EmailSender.Domain.Tests
         }
 
         [Fact]
+        public void RegistrarSucesso_DeveMarcarEnviadoENumerarTentativa()
+        {
+            var email = CriarEmailEnfileirado();
+            var inicio = DateTimeOffset.UtcNow;
+
+            var tentativa = email.RegistrarSucesso(inicio);
+
+            Assert.Equal(EmailStatusEnum.Enviado, email.Status);
+            Assert.Equal(1, tentativa.Numero);
+            Assert.True(tentativa.Sucesso);
+            Assert.Equal(inicio, tentativa.IniciadaEm);
+            Assert.Same(tentativa, Assert.Single(email.Tentativas));
+        }
+
+        [Fact]
+        public void RegistrarFalha_DeveMarcarFalhouComCodigoENumerarTentativa()
+        {
+            var email = CriarEmailEnfileirado();
+
+            var tentativa = email.RegistrarFalha(DateTimeOffset.UtcNow, "SMTP_INDISPONIVEL");
+
+            Assert.Equal(EmailStatusEnum.Falhou, email.Status);
+            Assert.Equal(1, tentativa.Numero);
+            Assert.False(tentativa.Sucesso);
+            Assert.Equal("SMTP_INDISPONIVEL", tentativa.CodigoErro);
+        }
+
+        [Fact]
+        public void RegistrarFalha_SemCodigoErro_DeveLancarEManterStatus()
+        {
+            var email = CriarEmailEnfileirado();
+
+            Assert.Throws<DomainException>(() => email.RegistrarFalha(DateTimeOffset.UtcNow, " "));
+            Assert.Equal(EmailStatusEnum.Enfileirado, email.Status);
+            Assert.Empty(email.Tentativas);
+        }
+
+        [Fact]
+        public void RegistrarSucesso_EmailPendente_DeveLancarDomainException()
+        {
+            Assert.Throws<DomainException>(() => CriarEmail().RegistrarSucesso(DateTimeOffset.UtcNow));
+        }
+
+        [Fact]
+        public void RegistrarFalha_EmailPendente_DeveLancarDomainException()
+        {
+            Assert.Throws<DomainException>(() => CriarEmail().RegistrarFalha(DateTimeOffset.UtcNow, "ERRO"));
+        }
+
+        [Fact]
         public void Tentativas_NaoPermiteModificacaoExterna()
         {
             var email = CriarEmailEnfileirado();
