@@ -22,6 +22,7 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
         private readonly IUnitOfWork _unitOfWork;
         private readonly IEmailSender _sender;
         private readonly TimeProvider _clock;
+        private readonly PoliticaRetry _retry;
         private readonly ILogger<ProcessarEmailHandler> _logger;
 
         public ProcessarEmailHandler(
@@ -30,9 +31,11 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
             IUnitOfWork unitOfWork,
             IEmailSender sender,
             TimeProvider clock,
+            PoliticaRetry retry,
             ILogger<ProcessarEmailHandler>? logger = null)
         {
             _logger = logger ?? NullLogger<ProcessarEmailHandler>.Instance;
+            _retry = retry;
             _emails = emails;
             _lotes = lotes;
             _unitOfWork = unitOfWork;
@@ -44,6 +47,10 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
         {
             var email = await _emails.ObterPorIdAsync(emailId, ct);
             if (email is null || email.Status != EmailStatusEnum.Pendente)
+                return ResultadoProcessamento.Ignorado;
+
+            // Proteção extra: e-mail reagendado só é processado quando a data chegar.
+            if (email.ProximaTentativaEm > _clock.GetUtcNow())
                 return ResultadoProcessamento.Ignorado;
 
             var lote = await _lotes.ObterPorIdAsync(email.LoteId, ct);
@@ -62,15 +69,15 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
             }
 
             var inicio = _clock.GetUtcNow();
-            var sucesso = await EnviarERegistrarAsync(email, lote, inicio, ct);
+            var resultadoEnvio = await EnviarERegistrarAsync(email, lote, inicio, ct);
 
             // O envio já ocorreu: o registro do resultado não pode ser abortado por cancelamento.
             await _unitOfWork.CommitAsync(CancellationToken.None);
 
-            return sucesso ? ResultadoProcessamento.Enviado : ResultadoProcessamento.Falhou;
+            return resultadoEnvio;
         }
 
-        private async Task<bool> EnviarERegistrarAsync(Email email, LoteEnvio lote, DateTimeOffset inicio, CancellationToken ct)
+        private async Task<ResultadoProcessamento> EnviarERegistrarAsync(Email email, LoteEnvio lote, DateTimeOffset inicio, CancellationToken ct)
         {
             try
             {
@@ -79,22 +86,30 @@ namespace EmailSender.Application.Emails.Commands.ProcessarEmailsPendentes
                 if (resultado.Sucesso)
                 {
                     email.RegistrarSucesso(inicio);
-                    return true;
+                    return ResultadoProcessamento.Enviado;
                 }
 
+                // Falha permanente: sem retry.
                 email.RegistrarFalha(inicio, NormalizarCodigo(resultado.CodigoErro));
-                return false;
+                return ResultadoProcessamento.Falhou;
             }
             catch (FalhaTemporariaEnvioException)
             {
                 email.RegistrarFalha(inicio, CodigoSmtpIndisponivel);
-                return false;
+
+                var feitas = email.Tentativas.Count;
+                if (!_retry.PodeTentarNovamente(feitas))
+                    return ResultadoProcessamento.Falhou;
+
+                // Conta a espera a partir do fim da falha, não do início do envio (um timeout longo consumiria o intervalo).
+                email.AgendarNovaTentativa(_clock.GetUtcNow() + _retry.IntervaloApos(feitas));
+                return ResultadoProcessamento.Reagendado;
             }
             catch (Exception ex) when (ex is not OperationCanceledException && !EhFalhaDeBanco(ex))
             {
                 _logger.LogError(ex, "Erro inesperado ao enviar o e-mail {EmailId}.", email.Id);
                 email.RegistrarFalha(inicio, CodigoErroInesperado);
-                return false;
+                return ResultadoProcessamento.Falhou;
             }
         }
 

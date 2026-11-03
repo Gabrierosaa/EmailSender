@@ -36,5 +36,17 @@ namespace EmailSender.Infrastructure.Persistence.Repositories
                 .Take(limite)
                 .ToListAsync(ct);
         }
+
+        public async Task<IReadOnlyList<Email>> ObterPendentesParaEnvioAsync(DateTimeOffset agora, int limite, CancellationToken ct)
+        {
+            return await _context.Emails
+                .Include(e => e.Tentativas)
+                .Where(e => e.Status == EmailStatusEnum.Pendente
+                    && (e.ProximaTentativaEm == null || e.ProximaTentativaEm <= agora))
+                .OrderBy(e => EF.Property<DateTimeOffset>(e, "CriadoEm"))
+                .ThenBy(e => e.Id)
+                .Take(limite)
+                .ToListAsync(ct);
+        }
     }
 }

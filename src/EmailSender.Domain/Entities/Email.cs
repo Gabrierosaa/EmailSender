@@ -12,6 +12,7 @@ namespace EmailSender.Domain.Entities
         public string NomeDestinatario { get; private set; }
         public string VariavelJson { get; private set; }
         public EmailStatusEnum Status { get; private set; }
+        public DateTimeOffset? ProximaTentativaEm { get; private set; }
 
         private readonly List<TentativaEnvio> _tentativas = new();
         public IReadOnlyCollection<TentativaEnvio> Tentativas => _tentativas.AsReadOnly();
@@ -34,6 +35,16 @@ namespace EmailSender.Domain.Entities
                 throw new DomainException($"Não é possível enfileirar um email com status {Status}.");
 
             Status = EmailStatusEnum.Enfileirado;
+            ProximaTentativaEm = null;
+        }
+
+        public void AgendarNovaTentativa(DateTimeOffset em)
+        {
+            if (Status != EmailStatusEnum.Falhou)
+                throw new DomainException($"Só é possível agendar nova tentativa de um email que falhou (status atual: {Status}).");
+
+            Status = EmailStatusEnum.Pendente;
+            ProximaTentativaEm = em;
         }
 
         public TentativaEnvio AdicionarTentativa(DateTimeOffset iniciadaEm, bool sucesso, string? codigoErro = null)
